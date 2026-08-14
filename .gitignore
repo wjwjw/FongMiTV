@@ -1,6 +1,7 @@
 .idea
 .vscode
 .gradle
+.gradle_local
 .github
 .settings
 *build
@@ -8,4 +9,26 @@
 *.properties
 lib-*.aar
 /Release
-/docs
+
+# --- scratch / build artifacts (do not commit) ---
+/tmp_*.py
+/tmp_*.xml
+/tmp_*.log
+/build_*.log
+/build_apk.bat
+/build_apk.log
+/hs_err_*
+/replay_*
+/probe.log
+/AndroidManifest.xml
+/androidx/
+
+# --- 项目 Agent 上下文（工具无关，见仓库根 AGENTS.md） ---
+# 记忆/技能已迁出到 AGENTS.md + docs/，方便跨 agent 协作；
+# .workbuddy 仅保留运行时数据 + 一个重定向指针（memory/MEMORY.md），不存项目记忆本体
+.workbuddy/**
+!.workbuddy/memory/
+!.workbuddy/memory/MEMORY.md
+# Python 缓存（docs/skills 脚本产生）
+**/__pycache__/
+*.pyc
