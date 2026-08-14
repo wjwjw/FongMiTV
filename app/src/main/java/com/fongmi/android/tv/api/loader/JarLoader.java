@@ -65,7 +65,7 @@ public class JarLoader {
         try {
             Class<?> clz = loader.loadClass("com.github.catvod.spider.Init");
             Method method = clz.getMethod("init", Context.class);
-            method.invoke(clz, App.get());
+            method.invoke(clz, App.getCatContext());
         } catch (Throwable e) {
             e.printStackTrace();
         }
@@ -122,7 +122,7 @@ public class JarLoader {
                 if (loader == null) return new SpiderNull();
                 Spider spider = (Spider) loader.loadClass("com.github.catvod.spider." + api.split("csp_")[1]).newInstance();
                 spider.siteKey = key;
-                spider.init(App.get(), ext);
+                spider.init(App.getCatContext(), ext);
                 return spider;
             } catch (Throwable e) {
                 e.printStackTrace();

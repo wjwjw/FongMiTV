@@ -16,8 +16,8 @@ android {
         applicationId "com.fongmi.android.tv"
         minSdk libs.versions.minSdk.get().toInteger()
         targetSdk libs.versions.targetSdk.get().toInteger()
-        versionCode 560
-        versionName "5.6.0"
+        versionCode 556
+        versionName "5.5.6"
         javaCompileOptions {
             annotationProcessorOptions {
                 arguments = ["room.schemaLocation": "$projectDir/schemas".toString(), "eventBusIndex": "com.fongmi.android.tv.event.EventIndex"]
@@ -59,6 +59,9 @@ android {
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix ".test"
+        }
         release {
             minifyEnabled = true
             shrinkResources = true
@@ -73,6 +76,12 @@ android {
         exclude group: 'com.android.support'
         resolutionStrategy {
             force libs.okhttp
+            eachDependency { details ->
+                if (details.requested.group == 'androidx.media3') {
+                    details.useVersion(libs.versions.media3.get())
+                    details.because('Use bundled Media3 build with MediaTitle and danmaku APIs')
+                }
+            }
         }
     }
 
@@ -102,11 +111,14 @@ androidComponents {
 dependencies {
     implementation fileTree(dir: "libs", include: ["*.aar"])
     implementation project(':catvod')
-    implementation project(':chaquo')
     implementation project(':quickjs')
     implementation libs.appcompat
     implementation libs.lifecycle.service
     implementation libs.media
+    implementation(libs.bundles.media3) {
+        exclude group: 'io.antmedia', module: 'rtmp-client'
+    }
+    implementation libs.nextlib.media3ext
     implementation libs.palette
     implementation libs.recyclerview
     implementation libs.room.runtime

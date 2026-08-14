@@ -31,6 +31,7 @@ import com.fongmi.android.tv.ui.dialog.ConfigDialog;
 import com.fongmi.android.tv.ui.dialog.DohDialog;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
 import com.fongmi.android.tv.ui.dialog.LiveDialog;
+import com.fongmi.android.tv.ui.dialog.RecommendDialog;
 import com.fongmi.android.tv.ui.dialog.RestoreDialog;
 import com.fongmi.android.tv.ui.dialog.SiteDialog;
 import com.fongmi.android.tv.utils.FileUtil;
@@ -39,6 +40,10 @@ import com.fongmi.android.tv.utils.PermissionUtil;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.github.catvod.bean.Doh;
 import com.github.catvod.net.OkHttp;
+
+import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.utils.Task;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
@@ -79,11 +84,13 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
         mBinding.versionText.setText(BuildConfig.VERSION_NAME);
         setCacheText();
         setOtherText();
+        RecommendDialog.prefetch();
     }
 
     private void setOtherText() {
         mBinding.dohText.setText(getDohList()[getDohIndex()]);
         mBinding.incognitoText.setText(Setting.getSwitch(Setting.isIncognito()));
+        mBinding.cloudDriveText.setText(Setting.getSwitch(Setting.isDisableCloudDrive()));
         mBinding.sizeText.setText((size = ResUtil.getStringArray(R.array.select_size))[PlayerSetting.getSize()]);
     }
 
@@ -115,7 +122,10 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
         mBinding.liveHome.setOnClickListener(this::onLiveHome);
         mBinding.wall.setOnLongClickListener(this::onWallEdit);
         mBinding.incognito.setOnClickListener(this::setIncognito);
+        mBinding.cloudDrive.setOnClickListener(this::setCloudDrive);
+        mBinding.clearHistory.setOnClickListener(this::onClearHistory);
         mBinding.vodHistory.setOnClickListener(this::onVodHistory);
+        mBinding.vodRecommend.setOnClickListener(this::onVodRecommend);
         mBinding.liveHistory.setOnClickListener(this::onLiveHistory);
         mBinding.wallDefault.setOnClickListener(this::setWallDefault);
         mBinding.wallRefresh.setOnClickListener(this::setWallRefresh);
@@ -216,6 +226,10 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
         HistoryDialog.create().vod().show(this);
     }
 
+    private void onVodRecommend(View view) {
+        RecommendDialog.create().show(this);
+    }
+
     private void onLiveHistory(View view) {
         HistoryDialog.create().live().show(this);
     }
@@ -251,6 +265,30 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
     private void setIncognito(View view) {
         Setting.putIncognito(!Setting.isIncognito());
         mBinding.incognitoText.setText(Setting.getSwitch(Setting.isIncognito()));
+    }
+
+    private void setCloudDrive(View view) {
+        Setting.putDisableCloudDrive(!Setting.isDisableCloudDrive());
+        mBinding.cloudDriveText.setText(Setting.getSwitch(Setting.isDisableCloudDrive()));
+    }
+
+    private void onClearHistory(View view) {
+        new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.setting_clear_history)
+                .setMessage(R.string.clear_history_confirm)
+                .setPositiveButton(android.R.string.ok, (d, w) -> clearHistory())
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void clearHistory() {
+        Task.execute(() -> {
+            AppDatabase.get().getHistoryDao().delete();
+            App.post(() -> {
+                RefreshEvent.history();
+                Notify.show(R.string.clear_history_success);
+            });
+        });
     }
 
     private void setSize(View view) {

@@ -3,6 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools"
     tools:ignore="ScopedStorage">
 
+    <uses-sdk tools:overrideLibrary="com.fongmi.hook,com.forcetech,com.ghost.thunder,com.p2p,com.tvbus.engine" />
+
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />

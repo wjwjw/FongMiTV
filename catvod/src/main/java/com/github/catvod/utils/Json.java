@@ -17,17 +17,18 @@ import java.util.Map;
 public class Json {
 
     public static JsonElement parse(String json) {
+        String s = stripComments(json);
         try {
-            return JsonParser.parseString(json);
+            return JsonParser.parseString(s);
         } catch (Throwable e) {
-            return new JsonParser().parse(json);
+            return new JsonParser().parse(s);
         }
     }
 
     public static boolean isObj(String text) {
         try {
             if (TextUtils.isEmpty(text)) return false;
-            new JSONObject(text);
+            new JSONObject(stripComments(text));
             return true;
         } catch (Exception e) {
             return false;
@@ -37,11 +38,50 @@ public class Json {
     public static boolean isArray(String text) {
         try {
             if (TextUtils.isEmpty(text)) return false;
-            new JSONArray(text);
+            new JSONArray(stripComments(text));
             return true;
         } catch (Exception e) {
             return false;
         }
+    }
+
+    /**
+     * 剥离 JSONC 风格的 // 行注释与块注释。
+     * 仅当不在字符串字面量内时才剥离，避免误伤 http:// 之类的值。
+     */
+    public static String stripComments(String json) {
+        if (json == null) return null;
+        int n = json.length();
+        StringBuilder out = new StringBuilder(n);
+        boolean inStr = false;
+        boolean escaped = false;
+        for (int i = 0; i < n; ) {
+            char c = json.charAt(i);
+            if (inStr) {
+                out.append(c);
+                if (escaped) escaped = false;
+                else if (c == '\\') escaped = true;
+                else if (c == '"') inStr = false;
+                i++;
+                continue;
+            }
+            if (c == '"') {
+                inStr = true;
+                out.append(c);
+                i++;
+            } else if (c == '/' && i + 1 < n && json.charAt(i + 1) == '/') {
+                i += 2;
+                while (i < n && json.charAt(i) != '\n') i++;
+            } else if (c == '/' && i + 1 < n && json.charAt(i + 1) == '*') {
+                i += 2;
+                while (i + 1 < n && !(json.charAt(i) == '*' && json.charAt(i + 1) == '/')) i++;
+                i += 2;
+            } else {
+                out.append(c);
+                i++;
+            }
+        }
+        return out.toString();
     }
 
     public static boolean isEmpty(JsonObject obj, String key) {

@@ -1,53 +1,31 @@
 package com.fongmi.android.tv.player.exo;
 
-import androidx.annotation.NonNull;
-import androidx.media3.common.Format;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
-import androidx.media3.common.Tracks;
 import androidx.media3.exoplayer.ExoPlayer;
-import androidx.media3.exoplayer.analytics.AnalyticsListener;
-import androidx.media3.exoplayer.audio.AudioSink;
-import androidx.media3.exoplayer.source.MediaSource;
 
-import com.fongmi.android.tv.player.effect.PlayerEffect;
 import com.fongmi.android.tv.player.engine.PlayerEngine;
 import com.fongmi.android.tv.player.media.MediaItemFactory;
 import com.fongmi.android.tv.player.media.PlaySpec;
 
-public class ExoPlayerEngine implements PlayerEngine, AnalyticsListener {
+import java.util.concurrent.TimeUnit;
 
-    private final ExoErrorMessageProvider provider;
-    private final ExoPlayerSession session;
-    private final ExoPlayerEffect effect;
-    private final ExoDiskPreload preload;
-    private final ExoPlayer player;
+public class ExoPlayerEngine implements PlayerEngine {
+
+    private final ErrorMsgProvider provider;
+    private final Player.Listener listener;
+    private final PreCache preCache;
+    private ExoPlayer player;
     private PlaySpec spec;
+    private int decode;
 
     public ExoPlayerEngine(int decode, Player.Listener listener) {
-        this.effect = new ExoPlayerEffect();
-        this.preload = new ExoDiskPreload();
-        this.provider = new ExoErrorMessageProvider();
-        this.session = new ExoPlayerSession(decode, listener, effect.getAudioProcessor());
-        this.player = this.session.player();
-        this.player.addAnalyticsListener(this);
-        this.effect.setPlayer(player);
-    }
-
-    @Override
-    public void onAudioTrackInitialized(@NonNull EventTime eventTime, @NonNull AudioSink.AudioTrackConfig audioTrackConfig) {
-        effect.applyAudioEffect();
-    }
-
-    @Override
-    public void onAudioTrackReleased(@NonNull EventTime eventTime, @NonNull AudioSink.AudioTrackConfig audioTrackConfig) {
-        effect.applyAudioEffect();
-    }
-
-    @Override
-    public void onTracksChanged(@NonNull EventTime eventTime, @NonNull Tracks tracks) {
-        effect.applyVideoEffect();
+        this.player = ExoUtil.buildPlayer(decode, listener);
+        this.provider = new ErrorMsgProvider();
+        this.preCache = new PreCache();
+        this.listener = listener;
+        this.decode = decode;
     }
 
     @Override
@@ -61,27 +39,22 @@ public class ExoPlayerEngine implements PlayerEngine, AnalyticsListener {
     }
 
     @Override
-    public int getAudioChannelCount() {
-        Format format = player.getAudioFormat();
-        return format == null ? Format.NO_VALUE : format.channelCount;
-    }
-
-    @Override
-    public PlayerEffect getEffect() {
-        return effect;
-    }
-
-    @Override
     public void release() {
-        player.removeAnalyticsListener(this);
-        preload.release();
-        effect.release();
-        session.release();
+        preCache.release();
+        player.release();
     }
 
     @Override
-    public void setDecode(int decode) {
-        session.setDecode(decode);
+    public Player rebuild() {
+        preCache.stop();
+        player.release();
+        return player = ExoUtil.buildPlayer(decode, listener);
+    }
+
+    @Override
+    public boolean setDecode(int decode) {
+        this.decode = decode;
+        return true;
     }
 
     @Override
@@ -91,19 +64,19 @@ public class ExoPlayerEngine implements PlayerEngine, AnalyticsListener {
     }
 
     @Override
-    public void preload(PlaySpec spec, long startPositionMs) {
-        session.preload(MediaItemFactory.from(spec), startPositionMs);
-    }
-
-    @Override
-    public void clearPreload() {
-        session.clearPreload();
-    }
-
-    @Override
     public void stop() {
-        preload.stop();
+        preCache.stop();
         player.stop();
+    }
+
+    @Override
+    public boolean isLive() {
+        return player.getDuration() < TimeUnit.MINUTES.toMillis(1) || player.isCurrentMediaItemLive();
+    }
+
+    @Override
+    public boolean isVod() {
+        return player.getDuration() > TimeUnit.MINUTES.toMillis(1) && !player.isCurrentMediaItemLive();
     }
 
     @Override
@@ -122,16 +95,9 @@ public class ExoPlayerEngine implements PlayerEngine, AnalyticsListener {
     }
 
     private void startInternal(long position) {
-        MediaItem item = MediaItemFactory.from(spec);
-        MediaSource source = session.usePreloadedMediaSource(item);
-        effect.clearAudioEffect();
-        if (source == null) player.setMediaItem(item, position);
-        else player.setMediaSource(source, position);
-        preload.start(player, item);
-        prepareAndPlay();
-    }
-
-    private void prepareAndPlay() {
+        MediaItem item = MediaItemFactory.from(spec, decode);
+        player.setMediaItem(item, position);
+        preCache.start(player, item);
         player.prepare();
         player.play();
     }

@@ -2,19 +2,21 @@ package com.fongmi.android.tv.ui.activity;
 
 import android.app.PendingIntent;
 import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
 import android.os.IBinder;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.view.accessibility.CaptioningManager;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
-import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.Observer;
 import androidx.media3.common.C;
@@ -24,6 +26,7 @@ import androidx.media3.common.VideoSize;
 import androidx.media3.exoplayer.drm.FrameworkMediaDrm;
 import androidx.media3.session.MediaController;
 import androidx.media3.session.SessionToken;
+import androidx.media3.ui.CaptionStyleCompat;
 import androidx.media3.ui.PlayerSeekView;
 import androidx.media3.ui.PlayerView;
 import androidx.media3.ui.TimeBar;
@@ -31,13 +34,12 @@ import androidx.media3.ui.danmaku.DanmakuConfig;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Result;
-import com.fongmi.android.tv.playback.PlaybackIntent;
 import com.fongmi.android.tv.player.PlayerManager;
 import com.fongmi.android.tv.player.media.PlaySpec;
+import com.fongmi.android.tv.player.util.PlayerHelper;
 import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.setting.DanmakuSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
-import com.fongmi.android.tv.setting.SubtitleSetting;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.github.catvod.net.OkHttp;
@@ -45,17 +47,14 @@ import com.google.common.util.concurrent.ListenableFuture;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public abstract class PlaybackActivity extends BaseActivity implements MediaController.Listener, Player.Listener, ServiceConnection {
 
-    private final List<ServiceReadyObserver<?>> serviceReadyObservers = new ArrayList<>();
     private final List<Runnable> foreverObserverRemovers = new ArrayList<>();
     private ListenableFuture<MediaController> mControllerFuture;
     private MediaController mController;
     private PlaybackService mService;
-    private boolean initialized;
     private boolean audioOnly;
     private boolean scrubbing;
     private boolean redirect;
@@ -85,11 +84,7 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     }
 
     protected void updateNavigationKey() {
-        updateNavigationKey(getPlaybackKey());
-    }
-
-    protected void updateNavigationKey(String key) {
-        if (mService != null) mService.setNavigationCallback(getNavigationCallback(), key);
+        if (mService != null) mService.setNavigationCallback(getNavigationCallback(), getPlaybackKey());
     }
 
     protected boolean isAudioOnly() {
@@ -129,39 +124,26 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         return key == null || (mService != null && key.equals(player().getKey()));
     }
 
-    protected boolean isBindingOwner() {
-        return mService != null && mService.ownsBinding(getNavigationCallback());
-    }
-
-    protected boolean hasPlaybackSource() {
-        return mService != null && isOwner() && !player().isEmpty();
-    }
-
     protected <T> void observeForever(LiveData<T> liveData, Observer<T> observer) {
         liveData.observeForever(observer);
         foreverObserverRemovers.add(() -> liveData.removeObserver(observer));
     }
 
-    protected <T> void observeWhenServiceReady(LiveData<T> liveData, Observer<T> observer) {
-        ServiceReadyObserver<T> serviceObserver = new ServiceReadyObserver<>(observer);
-        serviceReadyObservers.add(serviceObserver);
-        observeForever(liveData, serviceObserver);
+    public boolean isDebugViewVisible() {
+        // isDebugViewVisible()/toggleDebugView()/hideDebugView() belong to the fongmi media3 fork's
+        // PlayerView, which is not present in the local third_party/maven. Debug overlay disabled.
+        return false;
     }
 
     public void toggleDebugView() {
-        getPlayerView().toggleDebugView();
-        PlayerSetting.putDebug(getPlayerView().isDebugViewVisible());
     }
 
-    public void onChoose() {
-        if (!hasPlaybackSource()) return;
+    public void hideDebugView() {
+    }
+
+    public void chooseOtherPlayer(CharSequence title) {
         PlayerManager player = player();
-        PlaybackIntent.choose(this, player.getUrl(), player.getHeaders(), player.isVod(), player.getPosition(), player.getMediaTitle());
-        setRedirect(true);
-    }
-
-    public void onShare(CharSequence title, String url, Map<String, String> headers) {
-        PlaybackIntent.share(this, url, headers, title);
+        PlayerHelper.choose(this, player.getUrl(), player.getHeaders(), player.isVod(), player.getPosition(), title);
         setRedirect(true);
     }
 
@@ -230,14 +212,16 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         return C.TIME_UNSET;
     }
 
-    protected boolean seekTo(long deltaMs) {
+    protected void seekTo(long deltaMs) {
+        mController.seekTo(resolveSeekPositionMs(deltaMs));
+        mController.play();
+    }
+
+    private long resolveSeekPositionMs(long deltaMs) {
         PlayerManager player = player();
         long targetMs = Math.max(0, player.getPosition() + deltaMs);
         long durationMs = player.getDuration();
-        boolean seekToEnd = durationMs > 0 && targetMs >= durationMs;
-        mController.seekTo(seekToEnd ? durationMs : targetMs);
-        if (!seekToEnd) mController.play();
-        return seekToEnd;
+        return durationMs > 0 ? Math.min(targetMs, durationMs) : targetMs;
     }
 
     protected void startPlayer(String key, Result result, boolean useParse, long timeout, MediaMetadata metadata) {
@@ -245,24 +229,19 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     }
 
     protected void startPlayer(String key, Result result, boolean useParse, long timeout, long startPositionMs, MediaMetadata metadata) {
-        String error = getPlaybackError(result);
-        if (error != null) onError(error);
-        else startPlayerInternal(key, result, useParse, timeout, startPositionMs, metadata);
-    }
-
-    @Nullable
-    private String getPlaybackError(Result result) {
-        if (result.hasMsg()) return result.getMsg();
-        if (result.getRealUrl().isEmpty()) return ResUtil.getString(R.string.error_play_url);
-        if (result.getDrm() != null && !FrameworkMediaDrm.isCryptoSchemeSupported(result.getDrm().getUUID())) return ResUtil.getString(R.string.error_play_drm);
-        return null;
-    }
-
-    private void startPlayerInternal(String key, Result result, boolean useParse, long timeout, long startPositionMs, MediaMetadata metadata) {
-        attachPlayerView();
-        updateNavigationKey(key);
-        if (result.needParse() || useParse) player().parse(key, result, useParse, metadata, startPositionMs);
-        else player().start(PlaySpec.from(result, key, metadata), timeout, startPositionMs);
+        if (result.getDrm() != null && !FrameworkMediaDrm.isCryptoSchemeSupported(result.getDrm().getUUID())) {
+            onError(ResUtil.getString(R.string.error_play_drm));
+        } else if (result.hasMsg()) {
+            onError(result.getMsg());
+        } else if (result.getRealUrl().isEmpty()) {
+            onError(ResUtil.getString(R.string.error_play_url));
+        } else if (result.needParse() || useParse) {
+            attachSurface();
+            player().parse(key, result, useParse, metadata, startPositionMs);
+        } else {
+            attachSurface();
+            player().start(PlaySpec.from(result, key, metadata), timeout, startPositionMs);
+        }
     }
 
     private void bindPlaybackService() {
@@ -289,7 +268,9 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     }
 
     private void addSeekListener() {
-        getSeekView().getTimeBar().addListener(new TimeBar.OnScrubListener() {
+        TimeBar seekTimeBar = getSeekView().getTimeBar();
+        if (seekTimeBar == null) return;
+        seekTimeBar.addListener(new TimeBar.OnScrubListener() {
             @Override
             public void onScrubStart(@NonNull TimeBar timeBar, long position) {
                 PlaybackActivity.this.setScrubbing(true);
@@ -329,7 +310,7 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         long durationMs = mController == null ? C.TIME_UNSET : mController.getDuration();
         long incrementMs = getKeyTimeIncrementMs(durationMs);
         TimeBar timeBar = getSeekView().getTimeBar();
-        timeBar.setKeyTimeIncrement(incrementMs);
+        if (timeBar != null) timeBar.setKeyTimeIncrement(incrementMs);
     }
 
     private long getKeyTimeIncrementMs(long durationMs) {
@@ -348,6 +329,8 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
 
     private PendingIntent buildSessionIntent() {
         Intent intent = new Intent(this, getClass()).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+        Bundle extras = getIntent().getExtras();
+        if (extras != null) intent.putExtras(extras);
         return PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     }
 
@@ -355,61 +338,26 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         return mService != null && !isOwner();
     }
 
-    private void resumePlayback() {
-        if (shouldReclaim()) reclaimPlayback();
-        else attachPlayerView();
-    }
-
-    private void reclaimPlayback() {
-        detachPlayerView();
-        onReclaim();
-    }
-
-    private void claimBinding() {
-        if (mService == null) return;
-        mService.claimBinding(getNavigationCallback(), this::closePiP);
-        mService.setSessionActivity(buildSessionIntent());
-    }
-
-    private boolean canActivate() {
-        return mService != null && !isFinishing() && getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.STARTED);
-    }
-
-    private boolean canDispatch() {
-        return !isFinishing() && isBindingOwner();
-    }
-
-    private void activateService() {
-        if (!canActivate()) return;
-        claimBinding();
-        if (!isRedirect()) updateNavigationKey();
-        dispatchPendingObservers();
-        initService();
-    }
-
-    private void initService() {
-        if (initialized) return;
-        initialized = true;
-        onServiceConnected();
-    }
-
     private void closePiP() {
-        if (!isInPictureInPictureMode()) return;
+        // isInPictureInPictureMode() 是 API 24+ 才有，Android 6.0 上会 NoSuchMethodError，低版本无 PiP 直接跳过
+        if (Build.VERSION.SDK_INT >= 24 && isInPictureInPictureMode()) return;
         detach();
         finish();
     }
 
-    private void attachPlayerView() {
-        if (mService != null) syncPlayerView(player().getPlayer());
+    private void attachSurface() {
+        if (mService != null && getPlayerView().getPlayer() == null) getPlayerView().setPlayer(player().getPlayer());
+        applyDanmaku();
     }
 
-    private void detachPlayerView() {
+    private void detachSurface() {
         getPlayerView().setPlayer(null);
     }
 
-    private void syncPlayerView(Player player) {
-        getPlayerView().setPlayer(player);
-        syncDanmakuSource();
+    private void setRender() {
+        getPlayerView().setRender(PlayerSetting.getRender());
+        detachSurface();
+        attachSurface();
     }
 
     private void configurePlayerView() {
@@ -418,10 +366,20 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         playerView.setDanmakuOkHttpClient(OkHttp.player());
         playerView.setDanmakuEnabled(DanmakuSetting.isShow());
         playerView.setDanmakuConfig(DanmakuSetting.getConfig());
-        SubtitleSetting.applyStyle(this, playerView.getSubtitleView());
+        playerView.getSubtitleView().setStyle(getCaptionStyle());
+        playerView.getSubtitleView().setApplyEmbeddedStyles(true);
+        playerView.getSubtitleView().setApplyEmbeddedFontSizes(false);
+        if (PlayerSetting.getSubtitlePosition() != 0) playerView.getSubtitleView().setBottomPosition(PlayerSetting.getSubtitlePosition());
+        if (PlayerSetting.getSubtitleTextSize() != 0) playerView.getSubtitleView().setFractionalTextSize(PlayerSetting.getSubtitleTextSize());
     }
 
-    private void syncDanmakuSource() {
+    private CaptionStyleCompat getCaptionStyle() {
+        CaptioningManager manager = (CaptioningManager) getSystemService(Context.CAPTIONING_SERVICE);
+        if (PlayerSetting.isCaption() && manager != null) return CaptionStyleCompat.createFromCaptionStyle(manager.getUserStyle());
+        return new CaptionStyleCompat(Color.WHITE, Color.TRANSPARENT, Color.TRANSPARENT, CaptionStyleCompat.EDGE_TYPE_OUTLINE, Color.BLACK, null);
+    }
+
+    private void applyDanmaku() {
         if (mService == null || !isOwner()) return;
         getPlayerView().setDanmakuSource(player().getSelectedDanmakuUri());
     }
@@ -431,30 +389,20 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         detach();
     }
 
-    private void releaseService(boolean playbackOwner) {
+    private void releaseService(boolean owner) {
         mService.removePlayerCallback(mPlayerCallback);
-        if (!mService.releaseBinding(getNavigationCallback())) return;
-        if (shouldKeepServiceAlive()) keepServiceAlive(playbackOwner);
-        else mService.shutdown();
-    }
-
-    private boolean shouldKeepServiceAlive() {
-        return mService.hasMediaClient() || mService.hasPlayerCallback();
-    }
-
-    private void keepServiceAlive(boolean playbackOwner) {
-        if (playbackOwner) mService.suspend();
-        mService.resetSessionActivity();
+        if (owner) mService.setNavigationCallback(null, null);
+        if (mService.hasMediaClient() || mService.hasPlayerCallback()) {
+            if (owner) mService.suspend();
+            mService.resetSessionActivity();
+        } else if (owner) {
+            mService.shutdown();
+        }
     }
 
     private void detach() {
         releaseController();
         releaseBinding();
-    }
-
-    private void pausePlayback() {
-        if (mController != null) mController.pause();
-        else if (mService != null) player().pause();
     }
 
     private void releaseController() {
@@ -473,15 +421,9 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         mService = null;
     }
 
-    private void clearObservers() {
+    private void clearForeverObservers() {
         foreverObserverRemovers.forEach(Runnable::run);
         foreverObserverRemovers.clear();
-        serviceReadyObservers.clear();
-    }
-
-    private void dispatchPendingObservers() {
-        if (!canDispatch()) return;
-        serviceReadyObservers.forEach(ServiceReadyObserver::dispatch);
     }
 
     private final PlaybackService.PlayerCallback mPlayerCallback = new PlaybackService.PlayerCallback() {
@@ -494,7 +436,6 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         @Override
         public void onTracksChanged() {
             if (isOwner()) PlaybackActivity.this.onTracksChanged();
-            if (PlayerSetting.isDebug() && !getPlayerView().isDebugViewVisible()) getPlayerView().toggleDebugView();
         }
 
         @Override
@@ -514,7 +455,7 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
 
         @Override
         public void onPlayerRebuild(Player player) {
-            if (isOwner()) syncPlayerView(player);
+            if (isOwner()) setRender();
         }
 
         @Override
@@ -572,80 +513,47 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     @Override
     public void onServiceConnected(ComponentName name, IBinder binder) {
         mService = ((PlaybackService.LocalBinder) binder).getService();
+        mService.replaceBinding(this::closePiP);
+        mService.setSessionActivity(buildSessionIntent());
+        mService.setNavigationCallback(getNavigationCallback(), getPlaybackKey());
         mService.addPlayerCallback(mPlayerCallback);
-        activateService();
+        onServiceConnected();
+        applyDanmaku();
     }
 
     @Override
     public void onServiceDisconnected(ComponentName name) {
-        initialized = false;
         mService = null;
-    }
-
-    @Override
-    protected void onStart() {
-        super.onStart();
-        activateService();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        claimBinding();
         setRedirect(false);
-        dispatchPendingObservers();
-        resumePlayback();
+        if (shouldReclaim()) {
+            detachSurface();
+            onReclaim();
+        } else {
+            attachSurface();
+        }
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        if (isRedirect()) pausePlayback();
+        if (isRedirect() && mController != null) mController.pause();
     }
 
     @Override
     protected void onStop() {
         super.onStop();
-        if (isOwner() && (isFinishing() || PlayerSetting.isBackgroundOff())) pausePlayback();
-        if (!isInPictureInPictureMode()) detachPlayerView();
+        if (isOwner() && PlayerSetting.isBackgroundOff() && mController != null) mController.pause();
     }
 
     @Override
     protected void onDestroy() {
-        clearObservers();
-        detachPlayerView();
+        clearForeverObservers();
         super.onDestroy();
         releasePlaybackService();
-    }
-
-    private final class ServiceReadyObserver<T> implements Observer<T> {
-
-        private final Observer<T> observer;
-        private T pendingValue;
-        private boolean pending;
-
-        private ServiceReadyObserver(Observer<T> observer) {
-            this.observer = observer;
-        }
-
-        @Override
-        public void onChanged(T value) {
-            if (!canDispatch()) {
-                pendingValue = value;
-                pending = true;
-            } else {
-                deliver(value);
-            }
-        }
-
-        private void deliver(T value) {
-            pendingValue = null;
-            pending = false;
-            observer.onChanged(value);
-        }
-
-        private void dispatch() {
-            if (pending) deliver(pendingValue);
-        }
     }
 }

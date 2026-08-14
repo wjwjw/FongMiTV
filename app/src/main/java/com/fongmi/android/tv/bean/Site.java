@@ -18,6 +18,7 @@ import com.fongmi.android.tv.gson.ExtAdapter;
 import com.fongmi.android.tv.gson.HeaderAdapter;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.crawler.Spider;
+import com.github.catvod.crawler.SpiderNull;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Trans;
 import com.google.gson.JsonElement;
@@ -89,10 +90,6 @@ public class Site implements Parcelable {
     @Ignore
     @SerializedName("quickSearch")
     private Integer quickSearch;
-
-    @Ignore
-    @SerializedName("danmaku")
-    private Integer danmaku;
 
     @Ignore
     @SerializedName("categories")
@@ -230,10 +227,6 @@ public class Site implements Parcelable {
         return quickSearch == null ? 1 : quickSearch;
     }
 
-    public Integer getDanmaku() {
-        return danmaku == null ? 1 : danmaku;
-    }
-
     public List<String> getCategories() {
         return categories == null ? Collections.emptyList() : categories;
     }
@@ -335,6 +328,7 @@ public class Site implements Parcelable {
     }
 
     public Spider spider() {
+        if (BaseLoader.isCloudDriveSite(getName(), getApi(), getExt())) return new SpiderNull();
         return BaseLoader.get().getSpider(getKey(), getApi(), getExt(), getJar());
     }
 

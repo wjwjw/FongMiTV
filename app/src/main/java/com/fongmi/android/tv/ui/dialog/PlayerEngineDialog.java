@@ -21,6 +21,7 @@ public final class PlayerEngineDialog extends BaseBottomSheetDialog {
 
     private DialogPlayerEngineBinding binding;
     private PlayerManager player;
+    private CharSequence title;
     private TextView target;
 
     public static void setText(TextView view) {
@@ -32,11 +33,12 @@ public final class PlayerEngineDialog extends BaseBottomSheetDialog {
         view.setText(PlaybackAction.getEngineText(player));
     }
 
-    public static void show(FragmentActivity activity, TextView view, PlayerManager player) {
+    public static void show(FragmentActivity activity, TextView view, PlayerManager player, CharSequence title) {
         for (Fragment fragment : activity.getSupportFragmentManager().getFragments()) if (fragment instanceof PlayerEngineDialog) return;
         PlayerEngineDialog dialog = new PlayerEngineDialog();
         dialog.player = player;
         dialog.target = view;
+        dialog.title = title;
         dialog.show(activity.getSupportFragmentManager(), null);
     }
 
@@ -67,16 +69,20 @@ public final class PlayerEngineDialog extends BaseBottomSheetDialog {
         PlaybackActivity activity = getPlaybackActivity();
         if (activity == null) return;
         activity.toggleDebugView();
+        view.setSelected(activity.isDebugViewVisible());
         dismiss();
     }
 
     private void selectOther(View view) {
-        PlaybackActivity activity = getPlaybackActivity();
-        if (activity != null) activity.onChoose();
         dismiss();
+        PlaybackActivity activity = getPlaybackActivity();
+        if (activity != null) activity.chooseOtherPlayer(title);
     }
 
     private void selectEngine(int engine) {
+        PlaybackActivity activity = getPlaybackActivity();
+        boolean changed = engine != getCurrentEngine(player);
+        if (changed && activity != null) activity.hideDebugView();
         if (player == null) PlayerSetting.putEngine(engine);
         else player.setEngine(engine);
         setText(target, player);
@@ -85,8 +91,10 @@ public final class PlayerEngineDialog extends BaseBottomSheetDialog {
 
     private void setSelected() {
         int engine = getCurrentEngine(player);
+        PlaybackActivity activity = getPlaybackActivity();
         binding.exo.setSelected(engine == PlayerSetting.ENGINE_EXO);
         binding.mpv.setSelected(engine == PlayerSetting.ENGINE_MPV);
+        binding.debug.setSelected(activity != null && activity.isDebugViewVisible());
     }
 
     private View getSelectedView() {

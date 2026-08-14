@@ -195,5 +195,28 @@
             </intent-filter>
         </receiver>
 
+        <!-- 调试测速：adb shell am broadcast -n <pkg>/com.fongmi.android.tv.receiver.SpeedTestReceiver -->
+        <receiver
+            android:name=".receiver.SpeedTestReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.fongmi.android.tv.action.SPEEDTEST" />
+            </intent-filter>
+        </receiver>
+
+        <!-- 调试站点测速：adb shell am broadcast -n <pkg>/com.fongmi.android.tv.receiver.SiteSpeedReceiver -->
+        <receiver
+            android:name=".receiver.SiteSpeedReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.fongmi.android.tv.action.SITESPEED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- 站点测速实际执行体：由 SiteSpeedReceiver startService 拉起，独立于广播 60s ANR 限制 -->
+        <service
+            android:name=".receiver.SiteSpeedService"
+            android:exported="false" />
+
     </application>
 </manifest>

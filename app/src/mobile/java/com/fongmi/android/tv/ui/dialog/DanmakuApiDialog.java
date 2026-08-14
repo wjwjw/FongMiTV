@@ -47,13 +47,7 @@ public class DanmakuApiDialog extends BaseAlertDialog {
     }
 
     private void onPositive(DialogInterface dialog, int which) {
-        getListener().setDanmakuApi(binding.text.getText().toString().trim());
+        ((DanmakuListener) requireParentFragment()).setDanmakuApi(binding.text.getText().toString().trim());
         dismiss();
-    }
-
-    private DanmakuListener getListener() {
-        Fragment parent = getParentFragment();
-        if (parent instanceof DanmakuListener) return (DanmakuListener) parent;
-        return (DanmakuListener) requireActivity();
     }
 }

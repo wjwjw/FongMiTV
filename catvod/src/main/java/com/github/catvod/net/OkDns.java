@@ -5,13 +5,13 @@ import androidx.annotation.NonNull;
 import com.github.catvod.bean.Doh;
 import com.github.catvod.utils.Util;
 
+import java.net.IDN;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import okhttp3.Dns;
@@ -22,21 +22,15 @@ import okhttp3.dnsoverhttps.DnsOverHttps;
 public class OkDns implements Dns {
 
     private final ConcurrentHashMap<String, String> map;
-    private volatile Supplier<Doh> supplier;
-    private volatile DnsOverHttps doh;
+    private DnsOverHttps doh;
 
     public OkDns() {
         this.map = new ConcurrentHashMap<>();
     }
 
-    public synchronized void setDoh(Doh item) {
-        HttpUrl url = HttpUrl.parse(item.getUrl());
-        this.doh = url == null ? null : new DnsOverHttps.Builder().client(new OkHttpClient()).url(url).bootstrapDnsHosts(item.getHosts()).build();
-        this.supplier = null;
-    }
-
-    public synchronized void setDoh(Supplier<Doh> supplier) {
-        this.supplier = supplier;
+    public void setDoh(Doh item) {
+        if (item.getUrl().isEmpty()) return;
+        this.doh = new DnsOverHttps.Builder().client(new OkHttpClient()).url(HttpUrl.get(item.getUrl())).bootstrapDnsHosts(item.getHosts()).build();
     }
 
     public void clear() {
@@ -57,13 +51,21 @@ public class OkDns implements Dns {
     @NonNull
     @Override
     public List<InetAddress> lookup(@NonNull String hostname) throws UnknownHostException {
-        Supplier<Doh> supplier = this.supplier;
-        if (supplier != null) initDoh(supplier);
-        return (doh != null ? doh : Dns.SYSTEM).lookup(get(hostname));
+        return (doh != null ? doh : Dns.SYSTEM).lookup(toAscii(get(hostname)));
     }
 
-    private synchronized void initDoh(Supplier<Doh> supplier) {
-        if (supplier != this.supplier) return;
-        setDoh(supplier.get());
+    private static boolean isAscii(String s) {
+        for (int i = 0, n = s.length(); i < n; i++) if (s.charAt(i) > 127) return false;
+        return true;
+    }
+
+    /** 主机含非 ASCII（中文域名 / IDN）时转 punycode；ASCII / IPv6 / 已 punycode 原样返回。 */
+    private static String toAscii(String hostname) {
+        if (hostname == null || isAscii(hostname)) return hostname;
+        try {
+            return IDN.toASCII(hostname);
+        } catch (Exception e) {
+            return hostname;
+        }
     }
 }

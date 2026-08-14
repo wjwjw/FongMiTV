@@ -19,7 +19,7 @@ public class VodHistoryPolicy {
         History history = History.find(key);
         history = history == null ? create(key, item) : history;
         if (!TextUtils.isEmpty(mark)) history.setVodRemarks(mark);
-        if (Setting.isIncognito()) history.delete();
+        if (Setting.isIncognito() && history.getKey().equals(key)) history.delete();
         history.setVodName(item.getName());
         return history;
     }
@@ -38,62 +38,30 @@ public class VodHistoryPolicy {
     }
 
     public void save(History history, boolean exit) {
-        if (history == null || !history.canSave() || Setting.isIncognito()) return;
-        History copy = copyForSave(history);
-        Task.executeSerial(() -> {
-            copy.merge().save();
+        if (history != null && history.canSave() && !Setting.isIncognito()) Task.execute(() -> {
+            history.merge().save();
             if (exit) RefreshEvent.history();
         });
     }
 
-    public void saveProgress(History history, boolean exit, long time, long position, long duration) {
-        applyProgress(history, time, position, duration);
-        save(history, exit);
-    }
-
-    public void saveVisit(History history, boolean exit, long time) {
-        if (history == null || Setting.isIncognito()) return;
-        history.setCreateTime(time);
-        history.setPosition(C.TIME_UNSET);
-        history.setDuration(C.TIME_UNSET);
-        History copy = copyForSave(history);
-        Task.executeSerial(() -> {
-            copy.save();
-            if (exit) RefreshEvent.history();
-        });
-    }
-
-    public void saveCurrent(History history) {
-        if (history == null || Setting.isIncognito()) return;
-        History copy = copyForSave(history);
-        Task.executeSerial(copy::save);
+    public void sync(History history) {
+        if (history != null && !Setting.isIncognito()) Task.execute(history::save);
     }
 
     public void updateEpisode(History history, Flag flag, Episode episode) {
         if (history == null || flag == null || episode == null) return;
-        boolean match = episode.matchesName(history.getEpisode());
-        if (!match) history.setPosition(C.TIME_UNSET);
-        if (!match) history.setDuration(C.TIME_UNSET);
+        history.setPosition(episode.matchesName(history.getEpisode()) ? history.getPosition() : C.TIME_UNSET);
         history.setVodFlag(flag.getFlag());
         history.setVodRemarks(episode.getName());
         history.setEpisodeUrl(episode.getUrl());
     }
 
-    public void updateProgress(History history, long time, long position, long duration) {
-        applyProgress(history, time, position, duration);
-        if (history != null && history.canSave() && history.canScheduleSave()) saveCurrent(history);
-    }
-
-    private void applyProgress(History history, long time, long position, long duration) {
+    public void updateTime(History history, long time, long position, long duration) {
         if (history == null || position < 0 || duration <= 0) return;
         history.setCreateTime(time);
         history.setPosition(position);
         history.setDuration(duration);
-    }
-
-    private History copyForSave(History history) {
-        history.markSaveScheduled();
-        return history.copy();
+        if (history.canSave() && history.canSync()) sync(history);
     }
 
     public long startPositionMs(History history) {

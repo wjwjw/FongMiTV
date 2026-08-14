@@ -21,6 +21,8 @@ import com.github.catvod.utils.Path;
 
 import java.io.File;
 import java.io.InputStream;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 public class FileChooser {
@@ -80,7 +82,7 @@ public class FileChooser {
         if (DocumentsContract.isDocumentUri(context, uri)) path = getPathFromDocumentUri(context, uri);
         else if (ContentResolver.SCHEME_CONTENT.equals(uri.getScheme())) path = getDataColumn(context, uri);
         else if (ContentResolver.SCHEME_FILE.equalsIgnoreCase(uri.getScheme())) path = uri.getPath();
-        return path != null ? Uri.decode(path) : createFileFromUri(context, uri);
+        return path != null ? URLDecoder.decode(path, StandardCharsets.UTF_8) : createFileFromUri(context, uri);
     }
 
     private static String getPathFromDocumentUri(Context context, Uri uri) {
@@ -104,8 +106,6 @@ public class FileChooser {
         String fileName = getNameColumn(context, uri);
         if (docId.startsWith("raw:")) {
             return docId.replaceFirst("raw:", "");
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && docId.startsWith("msf:")) {
-            return getDataColumn(context, ContentUris.withAppendedId(MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL), Long.parseLong(docId.substring(4))));
         } else if (fileName != null) {
             return Environment.getExternalStorageDirectory() + "/Download/" + fileName;
         } else {

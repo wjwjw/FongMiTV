@@ -1,41 +1,35 @@
 package com.fongmi.android.tv.player.engine;
 
-import androidx.media3.common.C;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 
 import com.fongmi.android.tv.bean.Sub;
-import com.fongmi.android.tv.player.effect.PlayerEffect;
 import com.fongmi.android.tv.player.media.PlaySpec;
 
 public interface PlayerEngine {
 
-    int SOFT = C.DECODE_SOFTWARE;
-    int HARD = C.DECODE_HARDWARE;
+    int SOFT = 0;
+    int HARD = 1;
 
     Type getType();
 
     Player getPlayer();
 
-    int getAudioChannelCount();
-
     void release();
 
-    void setDecode(int decode);
+    Player rebuild();
 
-    default PlayerEffect getEffect() {
-        return PlayerEffect.NONE;
-    }
+    boolean setDecode(int decode);
 
     void start(PlaySpec spec, long startPositionMs);
 
-    default void preload(PlaySpec spec, long startPositionMs) {
+    default void stop() {
+        getPlayer().stop();
     }
 
-    default void clearPreload() {
-    }
+    boolean isLive();
 
-    void stop();
+    boolean isVod();
 
     default void setSubtitleStyle() {
     }

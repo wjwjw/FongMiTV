@@ -4,6 +4,7 @@ import android.app.PendingIntent;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
 
@@ -63,7 +64,7 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
 
     private NavigationCallback navigationCallback;
     private MediaLibrarySession session;
-    private ActivityBinding binding;
+    private Runnable onNewBinding;
     private PlayerManager player;
     private String navigationKey;
     private Player sessionPlayer;
@@ -72,21 +73,9 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
         return running;
     }
 
-    public void claimBinding(NavigationCallback owner, Runnable onReplaced) {
-        if (ownsBinding(owner)) return;
-        if (binding != null) binding.onReplaced().run();
-        binding = new ActivityBinding(owner, onReplaced);
-    }
-
-    public boolean ownsBinding(NavigationCallback owner) {
-        return binding != null && binding.owner() == owner;
-    }
-
-    public boolean releaseBinding(NavigationCallback owner) {
-        if (navigationCallback == owner) setNavigationCallback(null, null);
-        if (!ownsBinding(owner)) return false;
-        binding = null;
-        return true;
+    public void replaceBinding(Runnable callback) {
+        if (onNewBinding != null) onNewBinding.run();
+        onNewBinding = callback;
     }
 
     public PlayerManager player() {
@@ -186,6 +175,7 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
     public void onDestroy() {
         running = false;
         releaseSession();
+        player.stop();
         player.release();
         removeForeground();
         Server.get().setService(null);
@@ -195,7 +185,6 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
 
     private void stopAndClear() {
         player.stop();
-        player.clearPreload();
         player.clearMediaItems();
     }
 
@@ -240,7 +229,9 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
     }
 
     private void removeForeground() {
-        stopForeground(STOP_FOREGROUND_REMOVE);
+        // stopForeground(int) 带 flags 的重载是 API 24+ 才有，Android 6.0 上会 NoSuchMethodError，低版本回退到 boolean 重载
+        if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_REMOVE);
+        else stopForeground(true);
     }
 
     private void saveProgress() {
@@ -637,9 +628,6 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
 
         default void onAudio() {
         }
-    }
-
-    private record ActivityBinding(NavigationCallback owner, Runnable onReplaced) {
     }
 
     public class LocalBinder extends Binder {

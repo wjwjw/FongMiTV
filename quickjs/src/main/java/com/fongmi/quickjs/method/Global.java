@@ -1,7 +1,5 @@
 package com.fongmi.quickjs.method;
 
-import android.net.Uri;
-
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 
@@ -19,6 +17,7 @@ import com.whl.quickjs.wrapper.QuickJSContext;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
+import java.net.URLEncoder;
 import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -111,7 +110,7 @@ public class Global {
     @Keep
     @JSMethod
     public String js2Proxy(Boolean dynamic, Integer siteType, String siteKey, String url, JSObject headers) {
-        return getProxy(!dynamic) + String.format("&from=catvod&siteType=%s&siteKey=%s&header=%s&url=%s", siteType, siteKey, Uri.encode(headers.stringify()), Uri.encode(url));
+        return getProxy(!dynamic) + String.format("&from=catvod&siteType=%s&siteKey=%s&header=%s&url=%s", siteType, siteKey, URLEncoder.encode(headers.stringify()), URLEncoder.encode(url));
     }
 
     @Keep

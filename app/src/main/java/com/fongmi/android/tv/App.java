@@ -19,7 +19,11 @@ import com.google.gson.Gson;
 
 public class App extends Application implements Application.ActivityLifecycleCallbacks {
 
+    private static final String REAL_PKG = "com.fongmi.android.tv";
+
     private static volatile App instance;
+    /** catvod/spider 专用上下文，必须静态强引用（Init 内部为 WeakReference） */
+    private static volatile Context catContext;
 
     private final Handler handler;
     private final Gson gson;
@@ -75,7 +79,40 @@ public class App extends Application implements Application.ActivityLifecycleCal
     @Override
     protected void attachBaseContext(Context base) {
         super.attachBaseContext(base);
-        Init.set(base);
+        // 给 catvod / spider 传递一个「包名被伪装成官方 com.fongmi.android.tv」的上下文，
+        // 以通过 spider 的签名/包名反篡改自检（debug 包的 .test 后缀会触发其 System.exit 自杀）。
+        // App.getPackageName() 仍返回真实包名，不影响 FileProvider、PendingIntent 等。
+        // 注意：Init 内部用 WeakReference 持有，这里必须用静态强引用保活，否则会被 GC 回收导致 NPE。
+        // 必须返回一个 Application 子类实例：spider 的 Init.init 里直接 (Application) context 强转，
+        // 单纯的 ContextWrapper 过不了强转（会抛 ClassCastException -> Init.context() 为 null ->
+        // DexNative.<clinit> 空指针 -> 所有 *Guard spider 实例化失败 -> 搜索/首页无结果）。
+        // SpiderContext 继承 Application，所有 Context 调用委托给真正的 App 实例（this），
+        // 仅重写 getPackageName() 伪装官方包名以绕过 spider 反篡改自检（.test 后缀会触发其 System.exit 自杀）。
+        catContext = new SpiderContext(this);
+        Init.set(catContext);
+    }
+
+    /**
+     * 伪装包名的 Application 子类：除 getPackageName() 返回官方包名外，其余全部委托给真正的 App 实例。
+     * 必须 extends Application，否则 spider 的 (Application) context 强转会抛 ClassCastException。
+     */
+    private static final class SpiderContext extends Application {
+        SpiderContext(Application app) {
+            attachBaseContext(app);
+        }
+
+        @Override
+        public String getPackageName() {
+            return REAL_PKG;
+        }
+    }
+
+    /**
+     * 向 catvod/spider 报告官方包名的上下文（静态强引用，全局单例）。
+     * 用于 spider.init / JarLoader.invokeInit，绕过 .test 后缀导致的反篡改自杀。
+     */
+    public static Context getCatContext() {
+        return catContext != null ? catContext : get();
     }
 
     @Override

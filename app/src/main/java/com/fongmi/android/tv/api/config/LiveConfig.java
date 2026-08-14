@@ -17,6 +17,7 @@ import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.setting.LiveSetting;
+import com.fongmi.android.tv.utils.MirrorUtil;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.bean.Header;
 import com.github.catvod.bean.Proxy;
@@ -114,9 +115,22 @@ public class LiveConfig extends BaseConfig {
 
     @Override
     protected void load(Config config) throws Throwable {
-        String json = Decoder.getJson(UrlUtil.convert(config.getUrl()), TAG);
-        if (Json.isObj(json)) checkJson(config, Json.parse(json).getAsJsonObject());
-        else parseText(config, json);
+        // 镜像兜底：与 VodConfig 一致，直连失败依次换镜像重试；成功后记忆镜像
+        Throwable last = null;
+        for (String candidate : MirrorUtil.candidates(config.getUrl())) {
+            try {
+                String json = Decoder.getJson(UrlUtil.convert(candidate), TAG);
+                if (Json.isObj(json)) checkJson(config, Json.parse(json).getAsJsonObject());
+                else parseText(config, json);
+                MirrorUtil.remember(config.getUrl(), candidate);
+                return;
+            } catch (Throwable e) {
+                last = e;
+                MirrorUtil.forget(config.getUrl());
+                if (isCanceled(e)) throw e;
+            }
+        }
+        throw last;
     }
 
     @Override

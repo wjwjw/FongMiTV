@@ -113,8 +113,10 @@ public class Setting {
         Prefers.put("incognito", incognito);
     }
 
+    // 默认关闭自动更新检查，避免每次启动都弹出「发现新版本」升级弹窗（私有 fork 无需跟随上游版本）。
+    // 设置页手动「检测更新」仍可触发（Updater.force() 会主动 putUpdate(true) 再执行）。
     public static boolean getUpdate() {
-        return Prefers.getBoolean("update", true);
+        return Prefers.getBoolean("update", false);
     }
 
     public static void putUpdate(boolean update) {
@@ -135,5 +137,17 @@ public class Setting {
 
     public static void putZhuyin(boolean zhuyin) {
         Prefers.put("zhuyin", zhuyin);
+    }
+
+    // 默认开启：屏蔽「网盘家族」爬虫站点（夸克/阿里/115/百度/天翼等）。
+    // 这些 type==3 站点播放前要 UC 扫码换 Token，存在把云盘凭证交给源 spider 作者的泄露面；
+    // 且 headless 测速会反复弹「需要UC浏览器扫码」。开启后这些站点的 spider 直接返回 SpiderNull，
+    // 不弹窗、不泄露。若误拦了正常站，关掉即可（全局开关，作为安全/误拦的取舍阀门）。
+    public static boolean isDisableCloudDrive() {
+        return Prefers.getBoolean("disable_cloud_drive", true);
+    }
+
+    public static void putDisableCloudDrive(boolean value) {
+        Prefers.put("disable_cloud_drive", value);
     }
 }

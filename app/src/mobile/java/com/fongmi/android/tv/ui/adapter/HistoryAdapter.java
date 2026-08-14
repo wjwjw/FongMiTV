@@ -52,7 +52,7 @@ public class HistoryAdapter extends BaseDiffAdapter<History, HistoryAdapter.View
     public void clear() {
         super.clear();
         setDelete(false);
-        History.clear(VodConfig.getCid());
+        History.delete(VodConfig.getCid());
     }
 
     @NonNull

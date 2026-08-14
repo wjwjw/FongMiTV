@@ -9,7 +9,7 @@ import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.databinding.DialogMpvConfBinding;
 import com.fongmi.android.tv.event.ServerEvent;
-import com.fongmi.android.tv.player.mpv.MpvConfigFile;
+import com.fongmi.android.tv.player.mpv.MpvConfigFiles;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.utils.QRCode;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -38,8 +38,8 @@ public class MpvConfDialog extends BaseAlertDialog {
 
     @Override
     protected void initView() {
-        setText(MpvConfigFile.read());
-        binding.code.setImageBitmap(QRCode.getBitmap(Server.get().getAddress(4), 200, 0));
+        setText(MpvConfigFiles.read());
+        binding.code.setImageBitmap(QRCode.getBitmap(Server.get().getAddress(3), 200, 0));
     }
 
     @Override
@@ -58,7 +58,7 @@ public class MpvConfDialog extends BaseAlertDialog {
     }
 
     private void onPositive(View view) {
-        MpvConfigFile.write(binding.text.getText().toString());
+        MpvConfigFiles.write(binding.text.getText().toString());
         dismiss();
     }
 

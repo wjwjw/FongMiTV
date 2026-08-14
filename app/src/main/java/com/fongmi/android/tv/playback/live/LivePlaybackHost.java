@@ -1,7 +1,6 @@
 package com.fongmi.android.tv.playback.live;
 
 import androidx.annotation.Nullable;
-import androidx.media3.common.MediaMetadata;
 
 import com.fongmi.android.tv.bean.Channel;
 import com.fongmi.android.tv.bean.EpgData;
@@ -20,21 +19,25 @@ public interface LivePlaybackHost {
 
     boolean isPlayerLive();
 
-    boolean hasPlaybackSession();
-
-    boolean isPlaybackServiceReady();
-
-    void restorePlaybackKey(@Nullable String key);
-
-    long getPlayerPosition();
-
     ZoneId getZoneId();
+
+    @Nullable
+    default EpgData getNextEpgData(Channel channel) {
+        return LiveEpgPolicy.next(channel, getZoneId());
+    }
+
+    @Nullable
+    default EpgData getCurrentEpgData(Channel channel) {
+        return LiveEpgPolicy.current(channel, getZoneId());
+    }
 
     void requestUrl(LivePlayRequest request);
 
+    void requestCatchupUrl(LivePlayRequest request);
+
     void stopPlaybackForRefresh();
 
-    void startPlayback(Result result, long position, MediaMetadata metadata);
+    void startPlayback(Result result, long position, Channel channel);
 
     void resetPlaybackForError(String msg);
 
@@ -46,11 +49,9 @@ public interface LivePlaybackHost {
 
     void renderLineSelection(Channel channel, boolean show);
 
-    void renderEpgSelection(EpgData data);
+    void renderEpgSelection(Channel channel, EpgData data);
 
-    void renderPlaybackMetadata(MediaMetadata metadata);
-
-    void showCatchupReady(EpgData data);
+    void showCatchupReady(Channel channel, EpgData data);
 
     void showProgress();
 }

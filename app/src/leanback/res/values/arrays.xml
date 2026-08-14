@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 推荐点播源清单：每行格式「名称|URL」，可自行增删 -->
+    <!-- 全部写死在种子里（含 qist/tvbox README「各路大佬配置」），离线即用 -->
+    <!-- 进入设置时仍会自动从 qist/tvbox 仓库根目录拉取 13 个 json 配置并合并去重 -->
+    <!-- 注意：中文域名（IDN）现已兼容。catvod 的 OkHttp/OkDns 会在请求前将 Unicode 主机自动转 punycode（ASCII），不会触发 IDN 异常，故中文域名源可直接收录。下方 fty.json 仅是历史镜像，非必需。路径含中文的文件名仍建议走 ghproxy 镜像前缀（外层域名 ASCII）。 -->
+    <string-array name="recommend_vod">
+        <!-- 2026-08-09 按真机多源跑测综合排名重排(Tier A 端到端验证 → Tier B 仅验搜索 → Tier C 加载失败/被杀)，数据源 sitespeed_multisrc{1,2,3}.log，详见 tvbox_recommend_ranking.html -->
+        <!-- 格式「名称|URL」。本轮撤销上一轮硬编码的 11 个 qist json(0826/0825/0827/dianshi/js/XYQ/0821/99188/0707/9918/367)：URL 均为 qist.wyfc.qzz.io，与动态列表拉的 qist/tvbox 仓库同源，硬编码不提供独立于动态的兜底，反而丢自愈。现仅保留 15 个独立源(含原 jsm/xiaosa/fty 镜像)，其余 qist json 交动态列表拉取 -->
+        <!-- FongMi 官方源：原 fongmi.github.io/cat.json 已 404，改用官方 CatVodSpider 仓库配置（同步维护） -->
+        <!-- 南风 XC.json 为私有加密配置(需配套 Yoursmile.jar 解密)，本工程未内置该 jar，Gson 裸解析会失败；已指向活跃版 -->
+        <!-- 霜辉月明(金字塔源)：原路径 404，改用社区维护的 UndCover/PyramidStore/main/py.json -->
+        <!-- noimank/一木 为多仓聚合，内部子源混有中文域名，点到的特定子源可能触发 IDN 异常，不影响整体 -->
+        <item>南风|https://raw.githubusercontent.com/yoursmile66/TVBox/main/XC.json</item>
+        <item>饭太硬|https://qist.wyfc.qzz.io/fty.json</item>
+        <item>qist·潇洒|https://qist.wyfc.qzz.io/xiaosa/api.json</item>
+        <item>qist·电视自用(jsm)|https://qist.wyfc.qzz.io/jsm.json</item>
+        <item>FongMi 官方推荐|https://raw.githubusercontent.com/FongMi/CatVodSpider/main/json/config.json</item>
+        <item>霜辉月明|https://raw.githubusercontent.com/UndCover/PyramidStore/main/py.json</item>
+        <item>俊于|http://home.jundie.top:81/top98.json</item>
+        <item>2hacc·TVBox|https://raw.githubusercontent.com/2hacc/TVBox/main/oktv.json</item>
+        <item>noimank·多仓|https://ghproxy.net/https://raw.githubusercontent.com/noimank/tvbox/main/tvboxmuti.json</item>
+        <item>qirenzhidao·tvbox18|https://cdn.jsdelivr.net/gh/qirenzhidao/tvbox18@main/fongmi.json</item>
+        <item>xiaolong69·自用单仓|https://raw.githubusercontent.com/xiaolong69/tv/main/1.json</item>
+        <item>xiaolong69·多仓|https://raw.githubusercontent.com/xiaolong69/tv/main/duo.json</item>
+        <item>一木(xianyuyimu)·多仓|https://ghproxy.net/https://raw.githubusercontent.com/xianyuyimu/TVBOX-/main/TVBox/%E4%B8%80%E6%9C%A8%E5%A4%9A%E7%BA%BF%E8%B7%AF.json</item>
+        <item>应用多多·多仓|https://jihulab.com/duomv/apps/-/raw/main/duo.json</item>
+        <item>高天流云(gaotianliuyun)|https://gcore.jsdelivr.net/gh/gaotianliuyun/gao@master/js.json</item>
+    </string-array>
+</resources>

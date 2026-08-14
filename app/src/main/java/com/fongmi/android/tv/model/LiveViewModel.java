@@ -9,11 +9,10 @@ import com.fongmi.android.tv.Constant;
 import com.fongmi.android.tv.api.LiveApi;
 import com.fongmi.android.tv.bean.Channel;
 import com.fongmi.android.tv.bean.Epg;
+import com.fongmi.android.tv.bean.EpgData;
 import com.fongmi.android.tv.bean.Live;
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.exception.ExtractException;
-import com.fongmi.android.tv.playback.PlaybackResult;
-import com.fongmi.android.tv.playback.live.LivePlayRequest;
 import com.fongmi.android.tv.playback.live.LivePlaybackController;
 import com.fongmi.android.tv.playback.live.LivePlaybackHost;
 import com.fongmi.android.tv.playback.live.LivePlaybackState;
@@ -24,9 +23,8 @@ import java.util.function.Consumer;
 
 public class LiveViewModel extends ViewModel {
 
-    private final MutableLiveData<PlaybackResult<LivePlayRequest>> playback;
-    private final MutableLiveData<String> error;
     private final MutableLiveData<Boolean> xml;
+    private final MutableLiveData<Result> url;
     private final MutableLiveData<Live> live;
     private final MutableLiveData<Epg> epg;
 
@@ -37,20 +35,15 @@ public class LiveViewModel extends ViewModel {
     public LiveViewModel() {
         this.epg = new MutableLiveData<>();
         this.xml = new MutableLiveData<>();
+        this.url = new MutableLiveData<>();
         this.live = new MutableLiveData<>();
-        this.error = new MutableLiveData<>();
-        this.playback = new MutableLiveData<>();
+        this.zoneId = ZoneId.systemDefault();
         this.playbackState = new LivePlaybackState();
         this.tasks = new ViewModelTaskRunner<>(TaskType.class);
-        this.zoneId = ZoneId.systemDefault();
     }
 
-    public LiveData<PlaybackResult<LivePlayRequest>> playback() {
-        return playback;
-    }
-
-    public LiveData<String> error() {
-        return error;
+    public LiveData<Result> url() {
+        return url;
     }
 
     public LiveData<Boolean> xml() {
@@ -74,7 +67,6 @@ public class LiveViewModel extends ViewModel {
     }
 
     public void parse(Live item) {
-        error.setValue(null);
         execute(TaskType.LIVE, () -> {
             LiveApi.parse(item);
             return item;
@@ -92,27 +84,39 @@ public class LiveViewModel extends ViewModel {
         execute(TaskType.EPG, () -> LiveApi.getEpg(item, zoneId), epg::postValue, error -> epg.postValue(new Epg()));
     }
 
-    public void getUrl(LivePlayRequest request) {
-        execute(TaskType.URL, () -> getUrlResult(request), result -> postUrl(request, result), error -> handleUrlError(request, error));
+    public void getUrl(Channel item) {
+        getUrl(item, C.TIME_UNSET);
     }
 
-    private Result getUrlResult(LivePlayRequest request) throws Exception {
-        return request.isCatchup() ? LiveApi.getUrl(request.getChannel(), request.getCatchupData()) : LiveApi.getUrl(request.getChannel());
+    public void getUrl(Channel item, long startPositionMs) {
+        requestUrl(() -> LiveApi.getUrl(item), startPositionMs);
     }
 
-    private void postUrl(LivePlayRequest request, Result result) {
-        if (request.getPosition() != C.TIME_UNSET) result.setPosition(request.getPosition());
-        playback.postValue(new PlaybackResult<>(request, result));
+    public void getUrl(Channel item, EpgData data) {
+        getUrl(item, data, C.TIME_UNSET);
+    }
+
+    public void getUrl(Channel item, EpgData data, long startPositionMs) {
+        requestUrl(() -> LiveApi.getUrl(item, data), startPositionMs);
+    }
+
+    private void requestUrl(Callable<Result> callable, long startPositionMs) {
+        execute(TaskType.URL, callable, result -> postUrl(result, startPositionMs), error -> handleUrlError(error, startPositionMs));
+    }
+
+    private void postUrl(Result result, long startPositionMs) {
+        if (startPositionMs != C.TIME_UNSET) result.setPosition(startPositionMs);
+        url.postValue(result);
     }
 
     private void handleParseError(Throwable t) {
-        if (t instanceof ExtractException) error.postValue(t.getMessage());
+        if (t instanceof ExtractException) postUrl(Result.error(t.getMessage()), C.TIME_UNSET);
         else live.postValue(new Live());
     }
 
-    private void handleUrlError(LivePlayRequest request, Throwable t) {
-        if (t instanceof ExtractException) postUrl(request, Result.error(t.getMessage()));
-        else postUrl(request, new Result());
+    private void handleUrlError(Throwable t, long startPositionMs) {
+        if (t instanceof ExtractException) postUrl(Result.error(t.getMessage()), startPositionMs);
+        else postUrl(new Result(), startPositionMs);
     }
 
     private void setTimeZone(Live live) {

@@ -14,6 +14,7 @@ import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.Download;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.MirrorUtil;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.utils.Path;
 
@@ -75,10 +76,23 @@ public class WallConfig extends BaseConfig {
 
     @Override
     protected void load(Config config) throws Throwable {
+        // 镜像兜底：直连失败依次换镜像重试；成功后记忆镜像
         File file = FileUtil.getWall(0);
-        checkUrl(config.getUrl(), file);
-        setWallType(file);
-        setSnapshot(file);
+        Throwable last = null;
+        for (String candidate : MirrorUtil.candidates(config.getUrl())) {
+            try {
+                checkUrl(candidate, file);
+                MirrorUtil.remember(config.getUrl(), candidate);
+                setWallType(file);
+                setSnapshot(file);
+                return;
+            } catch (Throwable e) {
+                last = e;
+                MirrorUtil.forget(config.getUrl());
+                if (isCanceled(e)) throw e;
+            }
+        }
+        throw last;
     }
 
     @Override

@@ -8,7 +8,6 @@ import androidx.media3.common.C;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.player.PlayerManager;
 import com.fongmi.android.tv.setting.PlayerSetting;
-import com.fongmi.android.tv.setting.SpeedSetting;
 import com.fongmi.android.tv.utils.ResUtil;
 
 public final class PlaybackAction {
@@ -18,44 +17,32 @@ public final class PlaybackAction {
         setText(decode, getDecodeText(player));
     }
 
-    public static float toggleSpeed(PlayerManager player, TextView view) {
-        float speed = player.toggleSpeed();
-        showSpeedHint(view, speed);
-        return speed;
+    public static float addSpeed(PlayerManager player, TextView speed) {
+        return applySpeedText(player, speed, player.addSpeed());
     }
 
-    public static void startSpeedPress(PlayerManager player, TextView view) {
-        float speed = player.setSpeed(SpeedSetting.getLongPress());
-        showSpeedPress(view, speed);
+    public static float addSpeed(PlayerManager player, TextView speed, float value) {
+        return applySpeedText(player, speed, player.addSpeed(value));
     }
 
-    public static void showSpeedHint(TextView view, float speed) {
-        if (view == null) return;
-        setSpeedHint(view, speed);
-        view.animate().alpha(0.0f).setStartDelay(900).setDuration(180).withEndAction(() -> clearSpeedHint(view)).start();
+    public static float subSpeed(PlayerManager player, TextView speed, float value) {
+        return applySpeedText(player, speed, player.subSpeed(value));
     }
 
-    public static void showSpeedPress(TextView view, float speed) {
-        if (view == null) return;
-        setSpeedHint(view, speed);
+    public static float setSpeed(PlayerManager player, TextView speed, float value) {
+        return applySpeedText(player, speed, player.setSpeed(value));
     }
 
-    public static void hideSpeedHint(TextView view) {
-        if (view == null) return;
-        view.animate().cancel();
-        clearSpeedHint(view);
+    public static void setSpeedText(PlayerManager player, TextView speed) {
+        setText(speed, getSpeedText(player));
     }
 
-    private static void clearSpeedHint(TextView view) {
-        view.setVisibility(View.GONE);
-        view.setText("");
+    public static float toggleSpeed(PlayerManager player, TextView speed) {
+        return applySpeedText(player, speed, player.toggleSpeed());
     }
 
-    private static void setSpeedHint(TextView view, float speed) {
-        view.setAlpha(1.0f);
-        view.animate().cancel();
-        view.setVisibility(View.VISIBLE);
-        view.setText(ResUtil.getString(R.string.play_speed_hint, SpeedSetting.format(speed)));
+    public static void toggleDecode(PlayerManager player) {
+        player.toggleDecode();
     }
 
     public static void setTracks(PlayerManager player, View text, View audio, View video) {
@@ -87,6 +74,10 @@ public final class PlaybackAction {
         return player == null ? "" : player.getDecodeText();
     }
 
+    private static String getSpeedText(PlayerManager player) {
+        return player == null ? "" : player.getSpeedText();
+    }
+
     private static boolean hasTextTrack(PlayerManager player) {
         return player != null && (player.haveTrack(C.TRACK_TYPE_TEXT) || player.isVod());
     }
@@ -109,6 +100,11 @@ public final class PlaybackAction {
 
     private static boolean hasChapter(PlayerManager player) {
         return player != null && player.haveChapter();
+    }
+
+    private static float applySpeedText(PlayerManager player, TextView speed, String text) {
+        setText(speed, text);
+        return player.getSpeed();
     }
 
     private static void setText(TextView view, CharSequence text) {

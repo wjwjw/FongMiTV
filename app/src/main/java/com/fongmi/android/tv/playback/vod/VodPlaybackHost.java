@@ -1,7 +1,5 @@
 package com.fongmi.android.tv.playback.vod;
 
-import androidx.media3.common.MediaMetadata;
-
 import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.Flag;
 import com.fongmi.android.tv.bean.History;
@@ -16,8 +14,6 @@ public interface VodPlaybackHost {
     String getVodKey();
 
     String getVodId();
-
-    void setVodId(String id);
 
     String getVodName();
 
@@ -35,27 +31,15 @@ public interface VodPlaybackHost {
 
     boolean isPlayerEmpty();
 
-    boolean hasPlaybackSession();
-
     boolean isFullscreenForPlayback();
 
-    boolean isLivePlayback();
-
-    boolean canTrackPlaybackProgress();
-
-    boolean canPreloadNext();
-
     long getPlayerPosition();
-
-    long getPlayerDuration();
 
     void usePushId(String id);
 
     void requestDetail(String key, String id);
 
     void requestPlayer(VodPlayRequest request);
-
-    void requestPreload(VodPlayRequest request);
 
     void requestSearch(List<Site> sites, String keyword);
 
@@ -67,17 +51,11 @@ public interface VodPlaybackHost {
 
     void replay(long position);
 
-    void startPlayback(Result result, boolean useParse, long startPositionMs, MediaMetadata metadata);
-
-    boolean preloadPlayback(Result result, long startPositionMs, MediaMetadata metadata);
-
-    void clearPreload();
+    void startPlayback(Result result, boolean useParse, long startPositionMs, History history, Episode episode);
 
     void loadDanmaku(Result result, History history, Episode episode);
 
     void renderDetail(Vod item, History history);
-
-    void renderVodUpdate(Vod item);
 
     void renderEmptyDetail();
 
@@ -106,8 +84,6 @@ public interface VodPlaybackHost {
     void renderArtwork(String url);
 
     void renderDescription(String desc);
-
-    void renderPlaybackMetadata(MediaMetadata metadata);
 
     void onDetailFallbackScheduled();
 

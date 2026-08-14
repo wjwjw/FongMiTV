@@ -28,12 +28,12 @@ public final class DanmakuDialog extends BaseBottomSheetDialog implements Danmak
     private DialogDanmakuBinding binding;
     private PlayerManager player;
 
-    public DanmakuDialog() {
-        this.adapter = new DanmakuAdapter(this);
-    }
-
     public static DanmakuDialog create() {
         return new DanmakuDialog();
+    }
+
+    public DanmakuDialog() {
+        this.adapter = new DanmakuAdapter(this);
     }
 
     public DanmakuDialog player(PlayerManager player) {
@@ -86,7 +86,7 @@ public final class DanmakuDialog extends BaseBottomSheetDialog implements Danmak
 
     @Override
     public void onItemClick(Danmaku item) {
-        player.toggleDanmaku(item);
+        player.setDanmaku(item.isSelected() ? Danmaku.empty() : item);
         dismiss();
     }
 

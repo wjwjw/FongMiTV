@@ -23,12 +23,12 @@ public final class EditionDialog extends BaseBottomSheetDialog implements Editio
     private DialogEditionBinding binding;
     private PlayerManager player;
 
-    public EditionDialog() {
-        this.adapter = new EditionAdapter(this);
-    }
-
     public static EditionDialog create() {
         return new EditionDialog();
+    }
+
+    public EditionDialog() {
+        this.adapter = new EditionAdapter(this);
     }
 
     public EditionDialog player(PlayerManager player) {

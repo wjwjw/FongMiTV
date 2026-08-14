@@ -63,11 +63,11 @@ import com.fongmi.android.tv.utils.Clock;
 import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.KeyUtil;
+import com.fongmi.android.tv.utils.CrashGuard;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PermissionUtil;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.UrlUtil;
-import com.fongmi.android.tv.utils.Util;
 import com.github.catvod.net.OkHttp;
 import com.google.common.collect.Lists;
 
@@ -198,7 +198,18 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private void initConfig() {
-        VodConfig.get().init().load(getCallback());
+        VodConfig vod = VodConfig.get().init();
+        String url = vod.getConfig().getUrl();
+        if (CrashGuard.crashedLastLaunch(url)) {
+            // 上次启动加载该源时崩溃（spider 自卫式 System.exit 自杀），本次跳过自动加载，给一个可进设置的空主页。
+            // 注意：此处不标记已存活，使坏源被持续跳过，直到用户在设置里手动换成可用源。
+            Notify.show(getString(R.string.config_load_failed_tip));
+            LiveConfig.get().init().load();
+            WallConfig.get().init();
+            showContent();
+            return;
+        }
+        VodConfig.load(vod.getConfig(), getCallback());
         LiveConfig.get().init().load();
         WallConfig.get().init();
     }
@@ -299,7 +310,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     private void clearHistory() {
         mAdapter.removeItems(getHistoryIndex(), 1);
-        History.clear(VodConfig.getCid());
+        History.delete(VodConfig.getCid());
         mPresenter.setDelete(false);
         mHistoryAdapter.clear();
     }
@@ -365,7 +376,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onCastEvent(CastEvent event) {
         if (VodConfig.get().getConfig().equals(event.config())) {
-            VideoActivity.cast(this, event.history());
+            VideoActivity.cast(this, event.history().save(VodConfig.getCid()));
         } else {
             VodConfig.load(event.config(), getCallback(event));
         }
@@ -472,7 +483,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         } else if (mBinding.recycler.getSelectedPosition() != 0) {
             mBinding.recycler.scrollToPosition(0);
         } else {
-            if (PlaybackService.isRunning()) Util.moveToBackground(this);
+            if (PlaybackService.isRunning()) moveTaskToBack(true);
             else super.onBackInvoked();
         }
     }

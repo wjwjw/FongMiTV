@@ -13,6 +13,8 @@ import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.impl.Callback;
+import com.fongmi.android.tv.utils.CrashGuard;
+import com.fongmi.android.tv.utils.MirrorUtil;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.bean.Doh;
 import com.github.catvod.bean.Header;
@@ -66,7 +68,21 @@ public class VodConfig extends BaseConfig {
     }
 
     public static void load(Config config, Callback callback) {
-        get().clear().config(config).load(callback);
+        CrashGuard.recordLoading(config.getUrl());
+        get().clear().config(config).load(new Callback() {
+            @Override
+            public void success() {
+                CrashGuard.markAlive();
+                callback.success();
+            }
+
+            @Override
+            public void error(String msg) {
+                // 加载流程正常结束（网络错误等），非崩溃，允许下次重试
+                CrashGuard.markAlive();
+                callback.error(msg);
+            }
+        });
     }
 
     public VodConfig init() {
@@ -111,8 +127,31 @@ public class VodConfig extends BaseConfig {
 
     @Override
     protected void load(Config config) throws Throwable {
-        String json = Decoder.getJson(UrlUtil.convert(config.getUrl()), TAG);
-        checkJson(config, Json.parse(json).getAsJsonObject());
+        // GitHub 源镜像兜底：直连失败依次换镜像重试；成功后记忆镜像，下次同源先试镜像。
+        // 镜像 URL 仅用于本次拉取与相对路径解析（working），DB 落库仍是原始 URL。
+        Throwable last = null;
+        for (String candidate : MirrorUtil.candidates(config.getUrl())) {
+            try {
+                String json = Decoder.getJson(UrlUtil.convert(candidate), TAG);
+                Config working = candidate.equals(config.getUrl()) ? config : workingConfig(config, candidate);
+                checkJson(working, Json.parse(json).getAsJsonObject());
+                MirrorUtil.remember(config.getUrl(), candidate);
+                return;
+            } catch (Throwable e) {
+                last = e;
+                MirrorUtil.forget(config.getUrl());
+                if (isCanceled(e)) throw e;
+            }
+        }
+        throw last;
+    }
+
+    /** 镜像拉取用的临时配置：复制身份字段，仅替换 URL，使 resolveSpider 等相对路径解析到镜像域名。 */
+    private Config workingConfig(Config config, String url) {
+        Config working = new Config().type(config.getType()).url(url).name(config.getName());
+        working.setHome(config.getHome());
+        working.setParse(config.getParse());
+        return working;
     }
 
     @Override
@@ -136,7 +175,10 @@ public class VodConfig extends BaseConfig {
         for (Depot item : items) configs.add(Config.find(item, VOD));
         if (configs.isEmpty()) throw new Exception("Depot urls is empty");
         load(this.config = configs.get(0));
+        // 镜像兜底时 config 可能是镜像 URL，原始 depot 行也要一并清掉（保持直连时删除语义）
         Config.delete(config.getUrl());
+        String canon = MirrorUtil.canonical(config.getUrl());
+        if (!canon.equals(config.getUrl())) Config.delete(canon);
     }
 
     private void parseConfig(Config config, JsonObject object) {
@@ -146,7 +188,6 @@ public class VodConfig extends BaseConfig {
         initSite(config, object);
         initParse(config, object);
         config.setLogo(Json.safeString(object, "logo"));
-        config.setAssrt(Json.safeString(object, "assrt"));
         config.setNotice(Json.safeString(object, "notice"));
         config.setDanmaku(Json.safeString(object, "danmaku"));
     }
@@ -163,26 +204,58 @@ public class VodConfig extends BaseConfig {
 
     private void initLive(Config config, JsonObject object) {
         if (Json.isEmpty(object, "lives")) return;
-        Config temp = Config.find(config, LIVE).save();
-        boolean sync = LiveConfig.get().needSync(config.getUrl());
+        // 落库用原始 URL（非镜像 working URL）；镜像仅在本次加载重试时使用，DB/SP 始终保留源站直连地址
+        String url = MirrorUtil.canonical(config.getUrl());
+        Config temp = Config.find(url, config.getName(), LIVE).save();
+        boolean sync = LiveConfig.get().needSync(url);
         if (sync) LiveConfig.get().config(temp.update()).parse(object);
     }
 
     private void initWall(Config config, JsonObject object) {
         if (Json.isEmpty(object, "wallpaper")) return;
-        this.wall = Json.safeString(object, "wallpaper");
+        // 壁纸地址取自源 JSON（本就是原始地址）；若为相对路径则基于【原始】配置 base 解析成绝对地址，
+        // 避免解析到镜像 working 域名、保证 DB 存原始 URL。
+        this.wall = resolveWall(config, Json.safeString(object, "wallpaper"));
         Config temp = Config.find(wall, config.getName(), WALL).save();
         boolean sync = WallConfig.get().needSync(wall);
         if (sync) WallConfig.get().config(temp.update());
     }
 
+    /** 壁纸相对路径基于原始配置 base 解析为绝对地址；绝对/本地/asset 路径原样返回。 */
+    private String resolveWall(Config config, String wall) {
+        if (wall.isEmpty() || wall.startsWith("http") || wall.startsWith("file") || wall.startsWith("assets")) {
+            return wall;
+        }
+        return UrlUtil.resolve(UrlUtil.convert(MirrorUtil.canonical(config.getUrl())), wall);
+    }
+
     private void initSite(Config config, JsonObject object) {
-        String spider = Json.safeString(object, "spider");
+        String spider = resolveSpider(config, Json.safeString(object, "spider"));
         BaseLoader.get().parseJar(spider, true);
-        setSites(Json.safeListElement(object, "sites").stream().map(e -> Site.objectFrom(e, spider)).distinct().collect(Collectors.toCollection(ArrayList::new)));
+        // 兜底：即使某个站点自身声明了相对路径 jar，也按配置 base URL 解析成绝对 URL，
+        // 否则搜索时 BaseLoader.getSpider 用相对路径算出的 key 与预加载（绝对 URL key）对不上 -> SpiderNull -> 无结果。
+        setSites(Json.safeListElement(object, "sites").stream()
+                .map(e -> Site.objectFrom(e, spider))
+                .map(s -> { s.setJar(resolveSpider(config, s.getJar())); return s; })
+                .distinct()
+                .collect(Collectors.toCollection(ArrayList::new)));
         Map<String, Site> items = Site.findAll().stream().collect(Collectors.toMap(Site::getKey, Function.identity()));
         getSites().forEach(site -> site.sync(items.get(site.getKey())));
         setHome(config, getSites().isEmpty() ? new Site() : getSites().stream().filter(item -> item.getKey().equals(config.getHome())).findFirst().orElse(getSites().get(0)), false);
+    }
+
+    // 配置里的 spider 多为相对路径（如 ./jar/fan.txt;md5;xxx），需相对配置 base URL 解析成绝对 URL，
+    // 否则 JarLoader.parseJar 既不下载、也不会以正确 key（路径/URL 的 MD5）命中本地缓存，
+    // 导致全局 spider 加载失败、所有 spider 站点回退 SpiderNull、搜索与详情均无结果。
+    private String resolveSpider(Config config, String spider) {
+        if (spider.isEmpty() || spider.startsWith("http") || spider.startsWith("file") || spider.startsWith("assets")) {
+            return spider;
+        }
+        String base = UrlUtil.convert(config.getUrl());
+        String[] parts = spider.split(";md5;", 2);
+        String path = parts[0];
+        String suffix = parts.length > 1 ? ";md5;" + parts[1] : "";
+        return UrlUtil.resolve(base, path) + suffix;
     }
 
     private void initParse(Config config, JsonObject object) {

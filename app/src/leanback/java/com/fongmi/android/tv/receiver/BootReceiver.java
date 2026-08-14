@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.ConnectivityManager;
 import android.net.Network;
+import android.net.NetworkRequest;
 
 import androidx.annotation.NonNull;
 
@@ -24,7 +25,9 @@ public class BootReceiver extends BroadcastReceiver {
     }
 
     private void registerCallback() {
-        ((ConnectivityManager) App.get().getSystemService(Context.CONNECTIVITY_SERVICE)).registerDefaultNetworkCallback(new Callback());
+        // registerDefaultNetworkCallback 是 API 24+ 才有，Android 6.0 上会 NoSuchMethodError；改用 API 21+ 的 registerNetworkCallback
+        NetworkRequest request = new NetworkRequest.Builder().build();
+        ((ConnectivityManager) App.get().getSystemService(Context.CONNECTIVITY_SERVICE)).registerNetworkCallback(request, new Callback());
     }
 
     static class Callback extends ConnectivityManager.NetworkCallback {

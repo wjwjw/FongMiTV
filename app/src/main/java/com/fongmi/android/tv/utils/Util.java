@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
-import android.content.Intent;
 import android.os.Build;
 import android.os.IBinder;
 import android.provider.Settings;
@@ -37,14 +36,6 @@ public class Util {
     public static void toggleFullscreen(Activity activity, boolean fullscreen) {
         if (fullscreen) hideSystemUI(activity);
         else showSystemUI(activity);
-    }
-
-    public static void moveToBackground(Activity activity) {
-        try {
-            activity.moveTaskToBack(true);
-        } catch (NullPointerException ignored) {
-            activity.startActivity(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-        }
     }
 
     public static void hideSystemUI(Activity activity) {
@@ -121,10 +112,16 @@ public class Util {
         }
     }
 
+    /** API 23 兼容的 Html.fromHtml：双参(带 flags)重载是 API 24+ 才有的，Android 6.0 上直接调用会 NoSuchMethodError，低版本回退到单参 */
+    public static String fromHtml(String source) {
+        if (Build.VERSION.SDK_INT >= 24) return Html.fromHtml(source, Html.FROM_HTML_MODE_LEGACY).toString();
+        return Html.fromHtml(source).toString();
+    }
+
     public static String clean(String text) {
         if (!text.contains("<")) return text;
         StringBuilder sb = new StringBuilder();
-        text = Html.fromHtml(text, Html.FROM_HTML_MODE_LEGACY).toString().replace("\u00A0", " ").replace("\u3000", " ");
+        text = fromHtml(text).replace("\u00A0", " ").replace("\u3000", " ");
         for (String line : text.split("\\r?\\n")) sb.append(line.trim()).append("\n");
         return substring(sb.toString()).trim();
     }

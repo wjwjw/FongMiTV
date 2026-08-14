@@ -25,14 +25,13 @@ import com.fongmi.android.tv.bean.Sub;
 import com.fongmi.android.tv.databinding.ActivityCastBinding;
 import com.fongmi.android.tv.dlna.CastAction;
 import com.fongmi.android.tv.event.RefreshEvent;
-import com.fongmi.android.tv.playback.PlaybackAction;
-import com.fongmi.android.tv.player.media.MediaItemFactory;
+import com.fongmi.android.tv.player.PlayerManager;
 import com.fongmi.android.tv.service.DLNARendererService;
 import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.ui.custom.CustomKeyDownVod;
 import com.fongmi.android.tv.ui.dialog.PlayerEngineDialog;
-import com.fongmi.android.tv.ui.dialog.SpeedSettingDialog;
+import com.fongmi.android.tv.ui.dialog.SubtitleDialog;
 import com.fongmi.android.tv.ui.dialog.TrackDialog;
 import com.fongmi.android.tv.utils.Clock;
 import com.fongmi.android.tv.utils.KeyUtil;
@@ -43,9 +42,8 @@ import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 import org.jupnp.support.contentdirectory.DIDLParser;
 
-public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.Listener {
+public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.Listener, TrackDialog.Listener {
 
-    private final Object mDlnaOwner = new Object();
     private ActivityCastBinding mBinding;
     private DLNARendererService mRenderer;
     private CustomKeyDownVod mKeyDown;
@@ -91,16 +89,17 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
     @Override
     protected void onServiceConnected() {
         mBinding.control.action.decode.setText(player().getDecodeText());
+        mBinding.control.action.speed.setText(player().getSpeedText());
         setAction(getIntent());
     }
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        if (!intent.hasExtra(CastAction.KEY_EXTRA)) return;
         setIntent(intent);
-        if (mRenderer != null) mRenderer.activateDlna(mDlnaOwner);
-        setAction(intent);
+        if (mRenderer != null) mRenderer.setDlnaActive(true);
+        if (intent.hasExtra(CastAction.KEY_EXTRA)) setAction(intent);
+        else finish();
     }
 
     @Override
@@ -118,15 +117,18 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
     @Override
     @SuppressLint("ClickableViewAccessibility")
     protected void initEvent() {
+        mBinding.control.action.speed.setUpListener(this::onSpeedAdd);
+        mBinding.control.action.speed.setDownListener(this::onSpeedSub);
+        mBinding.control.action.text.setUpListener(this::onSubtitleClick);
+        mBinding.control.action.text.setDownListener(this::onSubtitleClick);
         mBinding.control.action.text.setOnClickListener(this::onTrack);
         mBinding.control.action.audio.setOnClickListener(this::onTrack);
         mBinding.control.action.video.setOnClickListener(this::onTrack);
         mBinding.control.action.scale.setOnClickListener(view -> onScale());
         mBinding.control.action.speed.setOnClickListener(view -> onSpeed());
         mBinding.control.action.reset.setOnClickListener(view -> onReset());
-        mBinding.control.action.player.setOnClickListener(view -> onPlayer());
+        mBinding.control.action.player.setOnClickListener(view -> onChoose());
         mBinding.control.action.decode.setOnClickListener(view -> onDecode());
-        mBinding.control.action.speed.setOnLongClickListener(view -> onSpeedLong());
         mBinding.video.setOnTouchListener((view, event) -> mKeyDown.onTouchEvent(event));
     }
 
@@ -183,13 +185,15 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
     }
 
     private void onSpeed() {
-        SpeedSettingDialog.create().player(player()).show(this);
-        hideControl();
+        mBinding.control.action.speed.setText(player().addSpeed());
     }
 
-    private boolean onSpeedLong() {
-        PlaybackAction.toggleSpeed(player(), mBinding.widget.message);
-        return true;
+    private void onSpeedAdd() {
+        mBinding.control.action.speed.setText(player().addSpeed(0.25f));
+    }
+
+    private void onSpeedSub() {
+        mBinding.control.action.speed.setText(player().subSpeed(0.25f));
     }
 
     private void onReset() {
@@ -198,8 +202,8 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
         start();
     }
 
-    private void onPlayer() {
-        PlayerEngineDialog.show(this, mBinding.control.action.player, player());
+    private void onChoose() {
+        PlayerEngineDialog.show(this, mBinding.control.action.player, player(), mBinding.widget.title.getText());
         hideControl();
     }
 
@@ -210,7 +214,7 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
     }
 
     private void onTrack(View view) {
-        TrackDialog.create().type(Integer.parseInt(view.getTag().toString())).player(player()).view(mBinding.player.getSubtitleView()).show(this);
+        TrackDialog.create().type(Integer.parseInt(view.getTag().toString())).player(player()).show(this);
         hideControl();
     }
 
@@ -233,7 +237,6 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
     }
 
     private void showError(String text) {
-        PlaybackAction.hideSpeedHint(mBinding.widget.message);
         mBinding.widget.error.setVisibility(View.VISIBLE);
         mBinding.widget.text.setText(text);
         hideProgress();
@@ -294,8 +297,7 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
     }
 
     private MediaMetadata buildMetadata() {
-        String title = mBinding.widget.title.getText().toString();
-        return MediaItemFactory.buildMetadata(title, "", "", "");
+        return PlayerManager.buildMetadata(mBinding.widget.title.getText().toString(), "", "");
     }
 
     private void onPaused() {
@@ -319,7 +321,7 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
         public void onServiceConnected(ComponentName name, IBinder binder) {
             if (!bound) return;
             mRenderer = ((DLNARendererService.LocalBinder) binder).getService();
-            mRenderer.activateDlna(mDlnaOwner);
+            mRenderer.setDlnaActive(true);
             consumePendingSeek();
         }
 
@@ -409,6 +411,12 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
     }
 
     @Override
+    public void onSubtitleClick() {
+        SubtitleDialog.create().view(mBinding.player.getSubtitleView()).player(player()).show(this);
+        App.post(this::hideControl, 100);
+    }
+
+    @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (KeyUtil.isMenuKey(event)) onToggle();
         if (isVisible(mBinding.control.getRoot())) setR1Callback();
@@ -436,13 +444,16 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
     @Override
     public void onSpeedUp() {
         if (!player().isPlaying()) return;
-        PlaybackAction.startSpeedPress(player(), mBinding.widget.message);
+        mBinding.widget.speed.setVisibility(View.VISIBLE);
+        mBinding.widget.speed.startAnimation(ResUtil.getAnim(R.anim.forward));
+        mBinding.control.action.speed.setText(player().setSpeed(PlayerSetting.getSpeed()));
     }
 
     @Override
     public void onSpeedEnd() {
-        PlaybackAction.hideSpeedHint(mBinding.widget.message);
-        player().setSpeed(1.0f);
+        mBinding.widget.speed.clearAnimation();
+        mBinding.widget.speed.setVisibility(View.GONE);
+        mBinding.control.action.speed.setText(player().setSpeed(1.0f));
     }
 
     @Override
@@ -496,7 +507,7 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
     }
 
     private void releaseRenderer() {
-        if (mRenderer != null) mRenderer.deactivateDlna(mDlnaOwner);
+        if (mRenderer != null) mRenderer.setDlnaActive(false);
         if (bound) unbindService(mRendererConnection);
         mRenderer = null;
         bound = false;

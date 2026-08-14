@@ -12,6 +12,8 @@ import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.util.Map;
 import java.util.Objects;
+import java.net.IDN;
+import java.net.URL;
 import java.util.concurrent.TimeUnit;
 
 import javax.net.ssl.SSLContext;
@@ -122,23 +124,23 @@ public class OkHttp {
     }
 
     public static Call newCall(String url) {
-        return client().newCall(new Request.Builder().url(url).build());
+        return client().newCall(new Request.Builder().url(toAsciiUrl(url)).build());
     }
 
     public static Call newCall(String url, String tag) {
-        return client().newCall(new Request.Builder().url(url).tag(tag).build());
+        return client().newCall(new Request.Builder().url(toAsciiUrl(url)).tag(tag).build());
     }
 
     public static Call newCall(OkHttpClient client, String url) {
-        return client.newCall(new Request.Builder().url(url).build());
+        return client.newCall(new Request.Builder().url(toAsciiUrl(url)).build());
     }
 
     public static Call newCall(OkHttpClient client, String url, String tag) {
-        return client.newCall(new Request.Builder().url(url).tag(tag).build());
+        return client.newCall(new Request.Builder().url(toAsciiUrl(url)).tag(tag).build());
     }
 
     public static Call newCall(String url, Map<String, String> headers) {
-        return client().newCall(new Request.Builder().url(url).headers(Headers.of(headers)).build());
+        return client().newCall(new Request.Builder().url(toAsciiUrl(url)).headers(Headers.of(headers)).build());
     }
 
     public static Call newCall(String url, Map<String, String> headers, ArrayMap<String, String> params) {
@@ -146,15 +148,15 @@ public class OkHttp {
     }
 
     public static Call newCall(String url, Map<String, String> headers, RequestBody body) {
-        return client().newCall(new Request.Builder().url(url).headers(Headers.of(headers)).post(body).build());
+        return client().newCall(new Request.Builder().url(toAsciiUrl(url)).headers(Headers.of(headers)).post(body).build());
     }
 
     public static Call newCall(String url, RequestBody body, String tag) {
-        return client().newCall(new Request.Builder().url(url).post(body).tag(tag).build());
+        return client().newCall(new Request.Builder().url(toAsciiUrl(url)).post(body).tag(tag).build());
     }
 
     public static Call newCall(OkHttpClient client, String url, RequestBody body) {
-        return client.newCall(new Request.Builder().url(url).post(body).build());
+        return client.newCall(new Request.Builder().url(toAsciiUrl(url)).post(body).build());
     }
 
     public static void cancel(String tag) {
@@ -181,9 +183,44 @@ public class OkHttp {
     }
 
     private static HttpUrl buildUrl(String url, ArrayMap<String, String> params) {
-        HttpUrl.Builder builder = Objects.requireNonNull(HttpUrl.parse(url)).newBuilder();
+        HttpUrl.Builder builder = Objects.requireNonNull(HttpUrl.parse(toAsciiUrl(url))).newBuilder();
         for (Map.Entry<String, String> entry : params.entrySet()) builder.addQueryParameter(entry.getKey(), entry.getValue());
         return builder.build();
+    }
+
+    private static boolean isAsciiHost(String host) {
+        for (int i = 0, n = host.length(); i < n; i++) if (host.charAt(i) > 127) return false;
+        return true;
+    }
+
+    /**
+     * 将 URL 中的 Unicode 主机（中文域名 / IDN）转换为 punycode（ASCII），
+     * 使 OkHttp 解析与 DNS 解析均不抛异常。已为 ASCII 的主机（含 IPv6 字面量、
+     * 已是 punycode 的 xn-- 主机）原样返回，不影响现有源。
+     */
+    private static String toAsciiUrl(String url) {
+        if (url == null) return null;
+        try {
+            URL u = new URL(url);
+            String host = u.getHost();
+            if (host == null || host.isEmpty() || isAsciiHost(host)) return url;
+            String ascii = IDN.toASCII(host);
+            if (ascii == null || ascii.equals(host)) return url;
+            StringBuilder sb = new StringBuilder();
+            sb.append(u.getProtocol()).append("://");
+            String ui = u.getUserInfo();
+            if (ui != null && !ui.isEmpty()) sb.append(ui).append('@');
+            sb.append(ascii);
+            int port = u.getPort();
+            if (port != -1) sb.append(':').append(port);
+            String file = u.getFile();
+            if (file != null) sb.append(file);
+            String ref = u.getRef();
+            if (ref != null) sb.append('#').append(ref);
+            return sb.toString();
+        } catch (Exception e) {
+            return url;
+        }
     }
 
     private static OkHttpClient.Builder getBuilder() {

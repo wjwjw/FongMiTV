@@ -1,8 +1,5 @@
 package com.fongmi.android.tv.playback.vod;
 
-import androidx.annotation.Nullable;
-import androidx.media3.common.MediaMetadata;
-
 import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.Flag;
 import com.fongmi.android.tv.bean.History;
@@ -21,26 +18,19 @@ public class VodPlaybackState {
     private final List<Flag> flags;
     private VodPlayRequest pendingRequest;
     private VodPlayRequest playingRequest;
-    private MediaMetadata playbackMetadata;
-    private VodPlayRequest preloadRequest;
-    private Result preloadResult;
-    private Result quality;
     private History history;
-    private String detailKey;
-    private String detailId;
-    private String searchKeyword;
-    private int qualityPosition;
+    private Result quality;
     private boolean selectFirstSource;
     private boolean autoFallback;
     private boolean useParse;
+    private String searchKeyword;
+    private int qualityPosition;
 
     public VodPlaybackState() {
         this.failedIds = new HashSet<>();
         this.sources = new ArrayList<>();
         this.flags = new ArrayList<>();
         this.quality = Result.empty();
-        this.detailKey = "";
-        this.detailId = "";
         this.searchKeyword = "";
     }
 
@@ -48,208 +38,148 @@ public class VodPlaybackState {
         failedIds.clear();
         sources.clear();
         flags.clear();
-        clearPlayRequest();
-        playbackMetadata = null;
-        clearPreload();
         quality = Result.empty();
         history = null;
-        detailKey = "";
-        detailId = "";
-        searchKeyword = "";
-        qualityPosition = 0;
+        clearPlayRequest();
         selectFirstSource = false;
         autoFallback = false;
         useParse = false;
+        searchKeyword = "";
+        qualityPosition = 0;
     }
 
-    void addFailedId(String id) {
+    public void addFailedId(String id) {
         if (id != null && !id.isEmpty()) failedIds.add(id);
     }
 
-    boolean hasFailedId(String id) {
+    public boolean hasFailedId(String id) {
         return id != null && failedIds.contains(id);
     }
 
-    List<Vod> getSources() {
+    public List<Vod> getSources() {
         return sources;
     }
 
-    void setSources(List<Vod> items) {
+    public void setSources(List<Vod> items) {
         sources.clear();
         sources.addAll(items);
     }
 
-    Vod removeFirstSource() {
+    public Vod removeFirstSource() {
         return sources.remove(0);
     }
 
-    boolean hasSources() {
+    public boolean hasSources() {
         return !sources.isEmpty();
     }
 
-    List<Flag> getFlags() {
+    public List<Flag> getFlags() {
         return flags;
     }
 
-    void setFlags(List<Flag> items) {
+    public void setFlags(List<Flag> items) {
         flags.clear();
         flags.addAll(items);
     }
 
-    boolean hasFlags() {
+    public boolean hasFlags() {
         return !flags.isEmpty();
     }
 
-    int getFlagPosition() {
+    public int getFlagPosition() {
         for (int i = 0; i < flags.size(); i++) if (flags.get(i).isSelected()) return i;
         return 0;
     }
 
-    Flag getFlag() {
+    public Flag getFlag() {
         return flags.get(getFlagPosition());
     }
 
-    Episode getEpisode() {
+    public Episode getEpisode() {
         Flag flag = getFlag();
         int position = flag.getPosition();
         return flag.getEpisodes().get(position >= 0 && position < flag.getEpisodes().size() ? position : 0);
     }
 
-    boolean hasEpisode() {
+    public boolean hasEpisode() {
         return hasFlags() && !getFlag().getEpisodes().isEmpty();
     }
 
-    Result getQuality() {
+    public Result getQuality() {
         return quality;
     }
 
-    void setQuality(Result quality) {
+    public void setQuality(Result quality) {
         this.quality = quality;
     }
 
-    int getQualityPosition() {
+    public int getQualityPosition() {
         return qualityPosition;
     }
 
-    void setQualityPosition(int qualityPosition) {
+    public void setQualityPosition(int qualityPosition) {
         this.qualityPosition = qualityPosition;
     }
 
-    History getHistory() {
+    public History getHistory() {
         return history;
     }
 
-    void setHistory(History history) {
+    public void setHistory(History history) {
         this.history = history;
     }
 
-    boolean isDetailRequested(String key, String id) {
-        return detailKey.equals(key) && detailId.equals(id);
-    }
-
-    void setDetailRequest(String key, String id) {
-        detailKey = key == null ? "" : key;
-        detailId = id == null ? "" : id;
-    }
-
-    VodPlayRequest getPendingRequest() {
+    public VodPlayRequest getPendingRequest() {
         return pendingRequest;
     }
 
-    void setPendingRequest(VodPlayRequest pendingRequest) {
+    public void setPendingRequest(VodPlayRequest pendingRequest) {
         this.pendingRequest = pendingRequest;
-        this.playingRequest = null;
     }
 
-    VodPlayRequest getPlayingRequest() {
+    public VodPlayRequest getPlayingRequest() {
         return playingRequest;
     }
 
-    void setPlayingRequest(VodPlayRequest playingRequest) {
+    public void setPlayingRequest(VodPlayRequest playingRequest) {
         this.playingRequest = playingRequest;
         this.pendingRequest = null;
     }
 
-    @Nullable
-    VodPlayRequest getActiveRequest() {
-        return pendingRequest != null ? pendingRequest : playingRequest;
-    }
-
-    void clearPlayRequest() {
+    public void clearPlayRequest() {
         pendingRequest = null;
         playingRequest = null;
     }
 
-    @Nullable
-    VodPlayRequest getPreloadRequest() {
-        return preloadRequest;
-    }
-
-    @Nullable
-    Result getPreloadResult() {
-        return preloadResult;
-    }
-
-    void beginPreload(VodPlayRequest request) {
-        preloadRequest = request;
-        preloadResult = null;
-    }
-
-    void completePreload(Result result) {
-        preloadResult = result;
-    }
-
-    @Nullable
-    Result consumePreload(String key, Flag flag, Episode episode) {
-        if (preloadRequest == null || preloadResult == null || !preloadRequest.matches(key, flag, episode)) return null;
-        Result result = preloadResult;
-        clearPreload();
-        return result;
-    }
-
-    void clearPreload() {
-        preloadRequest = null;
-        preloadResult = null;
-    }
-
-    @Nullable
-    MediaMetadata getPlaybackMetadata() {
-        return playbackMetadata;
-    }
-
-    void setPlaybackMetadata(MediaMetadata playbackMetadata) {
-        this.playbackMetadata = playbackMetadata;
-    }
-
-    boolean isSelectFirstSource() {
+    public boolean isSelectFirstSource() {
         return selectFirstSource;
     }
 
-    void setSelectFirstSource(boolean selectFirstSource) {
+    public void setSelectFirstSource(boolean selectFirstSource) {
         this.selectFirstSource = selectFirstSource;
     }
 
-    boolean isAutoFallback() {
+    public boolean isAutoFallback() {
         return autoFallback;
     }
 
-    void setAutoFallback(boolean autoFallback) {
+    public void setAutoFallback(boolean autoFallback) {
         this.autoFallback = autoFallback;
     }
 
-    boolean isUseParse() {
+    public boolean isUseParse() {
         return useParse;
     }
 
-    void setUseParse(boolean useParse) {
+    public void setUseParse(boolean useParse) {
         this.useParse = useParse;
     }
 
-    String getSearchKeyword() {
+    public String getSearchKeyword() {
         return searchKeyword == null ? "" : searchKeyword;
     }
 
-    void setSearchKeyword(String searchKeyword) {
+    public void setSearchKeyword(String searchKeyword) {
         this.searchKeyword = searchKeyword == null ? "" : searchKeyword;
     }
 }
