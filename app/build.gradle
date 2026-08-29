@@ -13,7 +13,7 @@ android {
     compileSdk libs.versions.compileSdk.get().toInteger()
 
     defaultConfig {
-        applicationId "com.fongmi.android.tv"
+        applicationId "com.fongmi.android.tv.test"
         minSdk libs.versions.minSdk.get().toInteger()
         targetSdk libs.versions.targetSdk.get().toInteger()
         versionCode 556
@@ -60,7 +60,6 @@ android {
 
     buildTypes {
         debug {
-            applicationIdSuffix ".test"
         }
         release {
             minifyEnabled = true
