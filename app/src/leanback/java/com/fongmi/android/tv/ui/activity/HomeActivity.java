@@ -189,6 +189,8 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         mAdapter.add(new ListRow(mFuncAdapter = new ArrayObjectAdapter(new FuncPresenter(this))));
         mAdapter.add(R.string.home_history);
         mAdapter.add(R.string.home_recommend);
+        // 同步填充功能栏（含「设置」），保证即使后续配置事件（COMMON）未触发，设置按钮也始终可点，可在 TV 上自救。
+        setFunc();
     }
 
     private void setTitle() {
@@ -200,9 +202,10 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     private void initConfig() {
         VodConfig vod = VodConfig.get().init();
         String url = vod.getConfig().getUrl();
-        if (CrashGuard.crashedLastLaunch(url)) {
+        if (CrashGuard.shouldSkip(url)) {
             // 上次启动加载该源时崩溃（spider 自卫式 System.exit 自杀），本次跳过自动加载，给一个可进设置的空主页。
-            // 注意：此处不标记已存活，使坏源被持续跳过，直到用户在设置里手动换成可用源。
+            // 累加拦截计数；当连续拦截达上限或距首次拦截超过 TTL 后，shouldSkip 将返回 false 而强制重试，避免永久锁死。
+            CrashGuard.noteSkipped();
             Notify.show(getString(R.string.config_load_failed_tip));
             LiveConfig.get().init().load();
             WallConfig.get().init();
